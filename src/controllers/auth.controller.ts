@@ -138,6 +138,86 @@ export const refreshToken = async (req: Request, res: Response) => {
 };
 
 // ---------------------------
+// login OAuth
+// ---------------------------
+
+export const loginOAuth = async (req: Request, res: Response) => {
+  try {
+    const { idToken } = req.body; // Token que envía el frontend
+    const deviceId = req.cookies.deviceId || req.cookies.deviceid || crypto.randomUUID();
+
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const { uid, email, name } = decodedToken;
+
+    const q = await db.collection("users").where("uid", "==", uid).limit(1).get();
+    let user;
+    
+    if (q.empty) {
+      const created = await db.collection("users").add({
+        uid,                  // guardamos el uid de Firebase
+        email,
+        nickname: name || null,
+        rolId: "usuario",      // default
+        createdAt: new Date(),
+      });
+      const doc = await created.get();
+      user = { id: doc.id, ...(doc.data() as any) };
+    } else {
+      user = { id: q.docs[0].id, ...(q.docs[0].data() as any) };
+    }
+
+    const accessToken = generateAccessToken(user.id, user.email);
+    const refreshToken = generateRefreshToken(user.id);
+
+    const sessionsColRef = db.collection("users").doc(user.id).collection("sessions");
+    const sessionDocId = deviceId;
+
+    const now = new Date();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const existingSessionRef = sessionsColRef.doc(sessionDocId);
+    const existingSessionSnap = await existingSessionRef.get();
+
+    if (existingSessionSnap.exists) {
+      await existingSessionRef.update({
+        refreshToken,
+        lastUsedAt: admin.firestore.Timestamp.fromDate(now),
+        userAgent: req.headers["user-agent"] || "Unknown",
+        ip: req.ip || req.headers["x-forwarded-for"] || "unknown",
+        revoke: false,
+      });
+    } else {
+      await existingSessionRef.set({
+        tokenId: crypto.randomUUID(),
+        refreshToken,
+        deviceId,
+        userAgent: req.headers["user-agent"] || "Unknown",
+        ip: req.ip || req.headers["x-forwarded-for"] || "unknown",
+        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+        revoke: false,
+        createdAt: admin.firestore.Timestamp.fromDate(now),
+        lastUsedAt: admin.firestore.Timestamp.fromDate(now),
+      });
+    }
+
+    const prod = process.env.NODE_ENV === "production";
+    res.cookie("AccessToken", accessToken, COOKIE_OPTIONS.access(prod));
+    res.cookie("RefreshToken", refreshToken, COOKIE_OPTIONS.refresh(prod));
+    res.cookie("deviceId", deviceId, COOKIE_OPTIONS.device(prod));
+
+    return res.status(200).json({
+      message: "Inicio de sesión OAuth exitoso",
+      user,
+    });
+
+  } catch (error) {
+    console.error("Error en loginOAuth:", error);
+    return res.status(500).json({ error: "Error al iniciar sesión con OAuth" });
+  }
+};
+
+
+// ---------------------------
 // login
 // ---------------------------
 export const login = async (req: Request, res: Response) => {
