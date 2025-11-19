@@ -13,8 +13,25 @@ const verifyUser = async (userId: string, res: Response) => {
   return doc;
 };
 
-export const getAllUsers = async (_req: Request, res: Response) => {
+export const getAllUsers = async (req: Request, res: Response) => {
   try {
+    const { email } = req.query;
+
+    if (email && typeof email === "string") {
+      const snap = await db
+        .collection("users")
+        .where("email", "==", email)
+        .limit(1)
+        .get();
+
+      if (snap.empty) {
+        return res.status(404).json({ error: "Usuario no encontrado" });
+      }
+
+      const doc = snap.docs[0];
+      return res.json({ id: doc.id, ...doc.data() });
+    }
+
     const snap = await db.collection("users").get();
     const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
@@ -41,7 +58,7 @@ export const getUserById = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { email, nickname, password, rolId } = req.body;
+    const { email, nickname, password, rolId, id } = req.body;
     
     if (!email || !password) {
       return res.status(400).json({ error: "Email y password son requeridos" });
@@ -59,15 +76,26 @@ export const createUser = async (req: Request, res: Response) => {
 
     const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 
-    const created = await db.collection("users").add({
+    const userData = {
       email,
       nickname: nickname || null,
       password: hashed,
       rolId,
       createdAt: new Date(),
-    });
+    };
 
-    const doc = await created.get();
+    let doc;
+    if (id) {
+      const existingDoc = await db.collection("users").doc(id).get();
+      if (existingDoc.exists) {
+        return res.status(400).json({ error: "El usuario ya existe" });
+      }
+      await db.collection("users").doc(id).set(userData);
+      doc = await db.collection("users").doc(id).get();
+    } else {
+      const created = await db.collection("users").add(userData);
+      doc = await created.get();
+    }
 
     res.status(201).json({ id: doc.id, ...doc.data() });
   } catch (error) {
