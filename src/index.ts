@@ -10,15 +10,28 @@ import authRoutes from "./routes/auth.routes";
 
 
 const app = express();
-const PORT = process.env.PORT ||3000
+const PORT = process.env.PORT || 3000;
 
+const explicitOrigin = "https://charlaton-frontend.vercel.app";
+const allowedOrigins = [
+  explicitOrigin,
+  process.env.FRONTEND_URL,
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+  "http://localhost:5173",
+].filter(Boolean) as string[];
 
 app.use(
-    cors({
-        origin: process.env.FRONTEND_URL || "http://localhost:5173",
-        credentials: true,
-        optionSuccessStatus: 200 
-    })
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    optionsSuccessStatus: 200,
+  })
 );
 
 app.use(cookieParser());

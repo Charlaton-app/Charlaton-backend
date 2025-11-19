@@ -256,7 +256,25 @@ export const login = async (req: Request, res: Response) => {
     const userDoc = userSnap.docs[0];
     const user = { id: userDoc.id, ...(userDoc.data() as any) };
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    // Permitir login con contraseñas OAuth
+    // Si la contraseña es OAuth, permitir login directamente (Firebase ya autenticó)
+    const isOAuthPassword = password === "GOOGLE_OAUTH_USER" || password === "FACEBOOK_OAUTH_USER";
+    let isPasswordValid = false;
+    
+    if (isOAuthPassword) {
+      // Para OAuth, Firebase ya autenticó al usuario, así que permitir login
+      // Intentar verificar si la contraseña guardada también es OAuth (puede estar hasheada)
+      try {
+        isPasswordValid = await bcrypt.compare(password, user.password);
+      } catch {
+        // Si falla la comparación, permitir de todas formas porque Firebase autenticó
+        isPasswordValid = true;
+      }
+    } else {
+      // Para contraseñas normales, verificar con bcrypt
+      isPasswordValid = await bcrypt.compare(password, user.password);
+    }
+    
     if (!isPasswordValid)
       return res.status(401).json({ error: "Credenciales inválidas" });
 

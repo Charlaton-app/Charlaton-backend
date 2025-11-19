@@ -4,7 +4,8 @@ import {
   logout,
   recoverPass,
   resetPass,
-  loginOAuth
+  loginOAuth,
+  refreshToken
 } from "../controllers/auth.controller";
 import {
   loginValidation,
@@ -16,6 +17,7 @@ const router = Router();
 
 router.post("/login", loginValidation, validate, login);
 router.post("/login/OAuth", loginValidation, validate, loginOAuth);
+router.post("/refresh", refreshToken);
 router.post("/logout", verifyToken, logout);
 router.post("/recover", recoverPass);
 router.post("/reset/:token", resetPass);

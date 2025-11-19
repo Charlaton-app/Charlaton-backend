@@ -1,10 +1,9 @@
-<<<<<<< HEAD
 node_modules
 # Keep environment variables out of version control
 .env
+firebase.json
 
 /src/generated/prisma
-=======
 # Logs
 logs
 *.log
@@ -144,4 +143,3 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
->>>>>>> 4aed403a3b2ce776c6ebb38c99d9b5041b1582f9
