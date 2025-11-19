@@ -1,5 +1,8 @@
-import { PrismaClient } from "@prisma/client";
+import admin from "firebase-admin";
+import serviceAccount from "./charlaton-backend-firebase-adminsdk-fbsvc-49794478e4.json";
 
-const prisma = new PrismaClient();
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount)
+});
 
-export default prisma;
+export const db = admin.firestore();

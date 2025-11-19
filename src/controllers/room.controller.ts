@@ -1,12 +1,48 @@
 import { Request, Response } from "express";
-import prisma from "../config/db";
+import { db } from "../config/db";
 
+const ROOMS = db.collection("rooms");
+
+/**
+ * Obtener todas las salas que no estén eliminadas
+ */
 export const getAllRooms = async (_req: Request, res: Response) => {
   try {
-    const rooms = await prisma.room.findMany({
-        where: {deletedAt : {not: null}},
-        include: {subRooms: true, connections: true },
-    });
+    const snapshot = await ROOMS.where("deletedAt", "==", null).get();
+
+    const rooms = [];
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+
+      // Obtener subRooms (subcolección)
+      const subRoomsSnap = await ROOMS.doc(doc.id)
+        .collection("subRooms")
+        .get();
+
+      const subRooms = subRoomsSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      // Obtener conexiones (subcolección)
+      const connectionsSnap = await ROOMS.doc(doc.id)
+        .collection("connections")
+        .get();
+
+      const connections = connectionsSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      rooms.push({
+        id: doc.id,
+        ...data,
+        subRooms,
+        connections,
+      });
+    }
+
     res.json(rooms);
   } catch (error) {
     console.error("Error obteniendo salas:", error);
@@ -14,120 +50,135 @@ export const getAllRooms = async (_req: Request, res: Response) => {
   }
 };
 
+/**
+ * Obtener sala por ID
+ */
 export const getRoomById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const room = await prisma.room.findFirst({
-        where: {        
-            AND: [
-                { id: Number(id) },
-                {deletedAt : {not: null}}
-            ],
-        },
-      include: { subRooms: true, connections: true },
+
+    const roomDoc = await ROOMS.doc(id).get();
+    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null)
+      return res.status(404).json({ error: "Sala no encontrada" });
+
+    // Subrooms
+    const subRoomsSnap = await ROOMS.doc(id).collection("subRooms").get();
+    const subRooms = subRoomsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Connections
+    const connectionsSnap = await ROOMS.doc(id)
+      .collection("connections")
+      .get();
+    const connections = connectionsSnap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+
+    res.json({
+      id,
+      ...roomDoc.data(),
+      subRooms,
+      connections,
     });
-    if (!room) return res.status(404).json({ error: "Sala no encontrada" });
-    res.json(room);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener sala" });
   }
 };
 
+/**
+ * Crear sala
+ */
 export const createRoom = async (req: Request, res: Response) => {
   try {
-    const { name, creatorId, password, parentRoomId, private: isPrivate, scheduleAt } = req.body;
-    const room = await prisma.room.create({
-      data: {
-        name,
-        creatorId,
-        password,
-        parentRoomId,
-        private: isPrivate ?? false,
-        scheduleAt,
-      },
-    });
-    res.status(201).json(room);
+    const {
+      name,
+      creatorId,
+      password,
+      parentRoomId,
+      private: isPrivate,
+      scheduleAt,
+    } = req.body;
+
+    const newRoomRef = ROOMS.doc();
+
+    const roomData = {
+      name,
+      creatorId,
+      password: password ?? null,
+      parentRoomId: parentRoomId ?? null,
+      private: isPrivate ?? false,
+      scheduleAt: scheduleAt ?? null,
+      deletedAt: null,
+      createdAt: new Date().toISOString(),
+    };
+
+    await newRoomRef.set(roomData);
+
+    res.status(201).json({ id: newRoomRef.id, ...roomData });
   } catch (error) {
     console.error("Error creando sala:", error);
     res.status(500).json({ error: "Error al crear sala" });
   }
-}; 
+};
 
-export const changePassword = async (req : Request, res: Response) => {
-    try{
+/**
+ * Cambiar password
+ */
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { password, confirmPassword } = req.body;
 
-        const { id } = req.params;
-        const {password, confirmPassword} = req.body;
+    if (password !== confirmPassword)
+      return res.status(400).json({ error: "Las contraseñas no coinciden" });
 
-        const existingRoom = await prisma.room.findUnique({
-            where:{id: Number(id)}
-        });
-    
-        if(!existingRoom){
-            res.status(404).json({error: "Room not found"});
-        }
-        
-        if(password !== confirmPassword){
-            res.status(401).json({error: "different passwords"});
-        }
+    const roomDoc = await ROOMS.doc(id).get();
+    if (!roomDoc.exists)
+      return res.status(404).json({ error: "Sala no encontrada" });
 
-        const updateRoom = await prisma.room.update({
-            where: {id : Number(id)},
-            data:{
-                password: password
-            }
-        });
+    await ROOMS.doc(id).update({ password });
 
-        res.json(updateRoom);
-    
+    res.json({ message: "Contraseña actualizada" });
+  } catch {
+    res.status(500).json({ error: "Error actualizando contraseña" });
+  }
+};
 
-    }catch(error){
-        console.log("Error changing password");
-        res.status(401).json({error : "Error changing the room password"});
-
-    }
-}
-
+/**
+ * Actualizar sala
+ */
 export const updateRoom = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const {name, private: isPrivate, scheduleAt} = req.body;
+    const { name, private: isPrivate, scheduleAt } = req.body;
 
-    const existingRoom = await prisma.room.findUnique({
-        where:{id: Number(id)}
-    });
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (isPrivate !== undefined) updateData.private = isPrivate;
+    if (scheduleAt !== undefined) updateData.scheduleAt = scheduleAt;
 
-    if(!existingRoom){
-        res.status(404).json({error: "Room not found"})
-    }
+    await ROOMS.doc(id).update(updateData);
 
-    const updateRoom:any = {}
-    if (name) updateRoom.name = name;
-    if (isPrivate) updateRoom.private = isPrivate;
-    if (scheduleAt) updateRoom.scheduleAt = scheduleAt;
-
-    const room = await prisma.room.update({
-      where: { id: Number(id) },
-      data : updateRoom,
-    });
-    res.json(room);
+    res.json({ id, ...updateData });
   } catch (error) {
     console.error("Error actualizando sala:", error);
     res.status(500).json({ error: "Error al actualizar sala" });
   }
 };
 
+/**
+ * Eliminación lógica
+ */
 export const deleteRoom = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await prisma.room.update({ 
-        where: { id: Number(id) },
-        data:{
-            deletedAt: new Date()
-        }
+
+    await ROOMS.doc(id).update({
+      deletedAt: new Date().toISOString(),
     });
+
     res.json({ message: "Sala eliminada" });
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: "Error al eliminar sala" });
   }
 };

@@ -11,9 +11,9 @@ import verifyToken from "../middlewares/authentication";
 
 const router = Router();
 
-router.get("/", verifyToken, getAllUsers);
+router.get("/", getAllUsers);
 router.get("/:id", verifyToken, getUserById);
-router.post("/", verifyToken, createUser);
+router.post("/", createUser);
 router.put("/:id", verifyToken, updateUser);
 router.put("/password/:id", verifyToken, changePassword);
 router.delete("/:id", verifyToken, deleteUser);

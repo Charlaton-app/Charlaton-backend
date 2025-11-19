@@ -1,26 +1,23 @@
 import { Request, Response } from "express";
-import prisma from "../config/db";
+import { db } from "../config/db";
 import bcrypt from "bcryptjs"; 
 
 const SALT_ROUNDS = 10;
 
-const verifyUser = async (id: number, res: Response) => {
-
-  const existingUser = await prisma.user.findUnique({
-    where: {id: id}
-  });
-
-  if (!existingUser){
-    return res.status(404).json({ error: "User not found" });
+const verifyUser = async (userId: string, res: Response) => {
+  const doc = await db.collection("users").doc(userId).get();
+  if (!doc.exists) {
+    res.status(404).json({ error: "User not found" });
+    return null;
   }
-    
-}
+  return doc;
+};
 
 export const getAllUsers = async (_req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany({
-      include: { rol: true },
-    });
+    const snap = await db.collection("users").get();
+    const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
     res.json(users);
   } catch (error) {
     console.error("Error obteniendo usuarios:", error);
@@ -31,12 +28,12 @@ export const getAllUsers = async (_req: Request, res: Response) => {
 export const getUserById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const user = await prisma.user.findUnique({
-      where: { id: Number(id) },
-      include: { rol: true },
-    });
-    if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
-    res.json(user);
+    const doc = await db.collection("users").doc(id).get();
+
+    if (!doc.exists)
+      return res.status(404).json({ error: "Usuario no encontrado" });
+
+    res.json({ id: doc.id, ...doc.data() });
   } catch (error) {
     res.status(500).json({ error: "Error al obtener usuario" });
   }
@@ -45,10 +42,34 @@ export const getUserById = async (req: Request, res: Response) => {
 export const createUser = async (req: Request, res: Response) => {
   try {
     const { email, nickname, password, rolId } = req.body;
-    const user = await prisma.user.create({
-      data: { email, nickname, password, rolId },
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email y password son requeridos" });
+    }
+
+    // Validar si el correo ya existe
+    const q = await db
+      .collection("users")
+      .where("email", "==", email)
+      .get();
+
+    if (!q.empty) {
+      return res.status(400).json({ error: "El correo ya está registrado" });
+    }
+
+    const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+
+    const created = await db.collection("users").add({
+      email,
+      nickname: nickname || null,
+      password: hashed,
+      rolId,
+      createdAt: new Date(),
     });
-    res.status(201).json(user);
+
+    const doc = await created.get();
+
+    res.status(201).json({ id: doc.id, ...doc.data() });
   } catch (error) {
     console.error("Error creando usuario:", error);
     res.status(500).json({ error: "Error al crear usuario" });
@@ -57,57 +78,47 @@ export const createUser = async (req: Request, res: Response) => {
 
 export const changePassword = async (req: Request, res: Response) => {
   try {
-
-    const { id }  = req.params;
+    const { id } = req.params;
     const { password, confirmPassword } = req.body;
 
-    await verifyUser(Number(id), res);
+    if (password !== confirmPassword)
+      return res.status(400).json({ error: "Different passwords" });
 
-    if(password !== confirmPassword){ 
-      return res.status(400).json({
-        error: "Different passwords",
-      });
-    }
+    const userDoc = await verifyUser(id, res);
+    if (!userDoc) return;
 
-    const hashed_password= await bcrypt.hash(password,SALT_ROUNDS);
+    const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 
-    const user = await prisma.user.update({
-      where: {id: Number(id)},
-      data: {
-        password: hashed_password
-      }
-    }); 
-
-    return res.status(200).json({
-      message: "user updated success",
-      user: user,
+    await db.collection("users").doc(id).update({
+      password: hashed,
+      updatedAt: new Date(),
     });
 
-  }catch(error){
-    console.error("Error while change password: ", error)
-    res.status(500).json({ error: "Error changing the password" });
-
+    res.status(200).json({ message: "Password updated successfully" });
+  } catch (error) {
+    console.error("Error al cambiar contraseña:", error);
+    res.status(500).json({ error: "Error al cambiar contraseña" });
   }
 };
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, nickname} = req.body;
+    const { email, nickname } = req.body;
 
-    await verifyUser(Number(id), res);
+    const userDoc = await verifyUser(id, res);
+    if (!userDoc) return;
 
-    const updateUser: any = {};
+    const updateData: any = {};
+    if (email) updateData.email = email;
+    if (nickname) updateData.nickname = nickname;
+    updateData.updatedAt = new Date();
 
-    if (email) updateUser.email = email;
-    if (nickname) updateUser.nickname = nickname;
+    await db.collection("users").doc(id).update(updateData);
 
+    const updated = await db.collection("users").doc(id).get();
 
-    const user = await prisma.user.update({
-      where: { id: Number(id) },
-      data: updateUser,
-    });
-    res.json(user);
+    res.json({ id: updated.id, ...updated.data() });
   } catch (error) {
     console.error("Error actualizando usuario:", error);
     res.status(500).json({ error: "Error al actualizar usuario" });
@@ -117,7 +128,9 @@ export const updateUser = async (req: Request, res: Response) => {
 export const deleteUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await prisma.user.delete({ where: { id: Number(id) } });
+
+    await db.collection("users").doc(id).delete();
+
     res.json({ message: "Usuario eliminado" });
   } catch (error) {
     res.status(500).json({ error: "Error al eliminar usuario" });
