@@ -137,6 +137,7 @@ export const refreshToken = async (req: Request, res: Response) => {
   }
 };
 
+
 // ---------------------------
 // login OAuth
 // ---------------------------
@@ -153,11 +154,13 @@ export const loginOAuth = async (req: Request, res: Response) => {
     let user;
     
     if (q.empty) {
+
       const created = await db.collection("users").add({
         uid,                  // guardamos el uid de Firebase
         email,
-        nickname: name || null,
-        rolId: "usuario",      // default
+        name: name || null,
+        birth_date : null,
+        rolId: 1,      // default
         createdAt: new Date(),
       });
       const doc = await created.get();
@@ -204,6 +207,18 @@ export const loginOAuth = async (req: Request, res: Response) => {
     res.cookie("AccessToken", accessToken, COOKIE_OPTIONS.access(prod));
     res.cookie("RefreshToken", refreshToken, COOKIE_OPTIONS.refresh(prod));
     res.cookie("deviceId", deviceId, COOKIE_OPTIONS.device(prod));
+
+    const profileComplete = Boolean(user.birthdate);
+
+    if (!profileComplete) {
+      // El usuario está logueado pero su perfil está incompleto
+      return res.status(200).json({
+        status: "profile_incomplete",
+        message: "El usuario debe completar su perfil.",
+        user,
+        required: ["birthdate"],
+      });
+    }
 
     return res.status(200).json({
       message: "Inicio de sesión OAuth exitoso",
