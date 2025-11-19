@@ -3,7 +3,8 @@ import {
   login,
   logout,
   recoverPass,
-  resetPass
+  resetPass,
+  loginOAuth
 } from "../controllers/auth.controller";
 import {
   loginValidation,
@@ -14,6 +15,7 @@ import verifyToken from "../middlewares/authentication";
 const router = Router();
 
 router.post("/login", loginValidation, validate, login);
+router.post("/login/OAuth", loginValidation, validate, loginOAuth);
 router.post("/logout", verifyToken, logout);
 router.post("/recover", recoverPass);
 router.post("/reset/:token", resetPass);
