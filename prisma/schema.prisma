@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         Int             @id @default(autoincrement())
+  email      String          @unique
+  nickname   String?
+  password   String
+  rolId      Int
+  rol        Rol             @relation(fields: [rolId], references: [id])
+  sessions   UserSection[]
+  resets     PasswordReset[]
+  roomAccess RoomAccess[]
+  connections UserConnection[]
+  messages   Message[]
+}
+
+model Rol {
+  id    Int    @id @default(autoincrement())
+  type  String
+  users User[]
+}
+
+model UserSection {
+  id           Int      @id @default(autoincrement())
+  tokenId      String   @unique
+  refreshToken String   @unique
+  userId       Int
+  deviceId     String?  @unique
+  userAgent    String?
+  ip           String?
+  revoke       Boolean  @default(false)
+  expiresAt    DateTime?
+  replaceBy    String?
+  createAt     DateTime @default(now())
+  lastUsedAt   DateTime?
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, deviceId])
+}
+
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Room {
+  id          Int              @id @default(autoincrement())
+  name        String //
+  creatorId   Int
+  password    String? //
+  parentRoomId Int? 
+  private     Boolean          @default(false) //
+  createAt    DateTime         @default(now()) 
+  scheduleAt  DateTime?//
+  deletedAt   DateTime?
+  parentRoom  Room?            @relation("SubRooms", fields: [parentRoomId], references: [id])
+  subRooms    Room[]           @relation("SubRooms")
+  accesses    RoomAccess[]
+  connections UserConnection[]
+  messages    Message[]
+}
+
+model RoomAccess {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  roomId     Int
+  grantedBy  Int
+  grantedAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  room       Room     @relation(fields: [roomId], references: [id])
+}
+
+model UserConnection {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  roomId    Int
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id])
+  room      Room      @relation(fields: [roomId], references: [id])
+  recordings Recording[]
+}
+
+model Recording {
+  id               Int       @id @default(autoincrement())
+  userConnectionId Int
+  fileUrl          String    @unique
+  startedAt        DateTime?
+  endedAt          DateTime?
+  status           RecordingStatus
+  userConnection   UserConnection @relation(fields: [userConnectionId], references: [id])
+}
+
+model Message {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  roomId     Int
+  content    String
+  visibility MessageVisibility
+  target     Json?
+  createAt   DateTime  @default(now())
+  updateAt   DateTime?
+  user       User      @relation(fields: [userId], references: [id])
+  room       Room      @relation(fields: [roomId], references: [id])
+}
+
+enum RecordingStatus {
+  recording
+  processing
+  done
+  failed
+}
+
+enum MessageVisibility {
+  public
+  private
+  group
+}
