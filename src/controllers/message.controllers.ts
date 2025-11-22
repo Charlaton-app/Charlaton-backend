@@ -50,9 +50,14 @@ export const getAllMessageOfUserInRoom = async (req: Request, res: Response) => 
   }
 };
 
-export const createMessage = async (req: Request, res: Response) => {
+export const sendMessageTo = (target: any[], userId: string): boolean => {
+  return target.some(t => t.userId === userId);
+};
+
+export const createMessage = async (data: any) => {
+
+  const { userId, roomId, content, visibility, target } = data;
   try {
-    const { userId, roomId, content, visibility, target } = req.body;
 
     const messageRef = await db
       .collection("rooms")
@@ -69,10 +74,10 @@ export const createMessage = async (req: Request, res: Response) => {
 
     const message = await messageRef.get();
 
-    res.status(201).json({ id: message.id, ...message.data() });
+    return {user: userId, message : message, success: true};
   } catch (error) {
     console.error("Error al crear mensaje:", error);
-    res.status(500).json({ error: "Error al crear mensaje" });
+    return {userId: userId, success: false};
   }
 };
 

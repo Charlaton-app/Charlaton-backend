@@ -7,10 +7,153 @@ import roomAccessRoutes from "./routes/roomAccess.routes";
 import userConnectionRoutes from "./routes/userConnection.routes";
 import messageRoutes from "./routes/message.routes";
 import authRoutes from "./routes/auth.routes";
+import { Server, Socket } from "socket.io";
+import http from "http";
+import jwt from "jsonwebtoken";
+import { db } from "./config/db";
+import { createConnection } from "./controllers/userConnection.controller";
+import { getRoomAccessForUser } from "./controllers/roomAccess.controller";
+import { leftConnection } from "./controllers/userConnection.controller";
+import { createMessage, sendMessageTo } from "./controllers/message.controllers";
 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
+const io = new Server(server,  { cors: { origin: "*" } }); // para pruebas con el cors, debe cambiarse
+
+// configuración del servidor websocket
+
+io.use((socket, next) => {
+  const { token } = socket.handshake.auth;
+  try {
+    const decoded = jwt.verify(token, process.env.ACCESS_SECRET as string);
+    socket.data.user = decoded;
+    next();
+  } catch (err) {
+    next(new Error("Token inválido"));
+  }
+});
+
+
+io.on("connection", async (socket) => {
+
+  socket.on("join_room", async (roomId) => {
+
+    console.log("usuario intenta entrar...");
+
+    const user = socket.data.user;
+    const userId = user.id;
+    socket.data.userId = userId;
+
+    const accessSnap = await getRoomAccessForUser(userId, roomId);
+
+    if(!accessSnap.success){
+
+      socket.emit("join_room_error", {user: user, message: "usuario sin permisos", success : false});
+  
+      console.log("Usuario sin permiso...");
+  
+      socket.disconnect(true);
+  
+      return;
+    }
+
+    socket.data.roomId = roomId;
+
+    socket.join(roomId);
+
+    console.log("usuario ingresa a la sala...");
+
+    const connectionSnap = await createConnection(userId, roomId);
+
+    if (!connectionSnap.success){
+
+      socket.to(roomId).emit("join_room_error",{user:user, message: "error al crear conexión", success: false});
+      return;
+    } 
+
+    socket.to(roomId).emit("join_room_success",{user:user, message: "acceso exitoso", success: true});
+
+
+  });
+
+  socket.on("disconnect", async () =>{
+
+    const user = socket.data.user;
+    const userId = socket.data.userId;
+    const roomId = socket.data.roomId;
+
+    await leftConnection(userId, roomId);
+
+    socket.to(roomId).emit("disconnect",{user:user, message: "usuario desconectado", success: true});
+
+  });
+
+
+  socket.on("message", async (msg, visibility, target) => {
+    
+    const user = socket.data.user;
+    const userId = socket.data.userId;
+    const roomId = socket.data.roomId;
+
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room) return;
+
+    const connection = await db.collection("rooms").doc(roomId).collection("connections").where("userId","==",userId).get();
+
+    if(connection.empty){
+      socket.to(roomId).emit("join_room_error",{user:user, success: false});
+      return;
+    }
+
+    const data = {
+      userId : userId,
+      roomId : roomId,
+      content : msg,
+      visibility : visibility,
+      target : target
+    };
+
+    const message = await createMessage(data);
+    
+    if(!message.success){
+      socket.to(roomId).emit("message_error",{message:"error", success: false});
+      return;
+    }
+
+    if(visibility === "public"){
+      socket.to(roomId).emit("message_success",{content : msg, success: true, visibility: "public"});
+    }
+
+    if(visibility === "private"){
+      
+      for (const socketId of room) {
+
+        const clientSocket = io.sockets.sockets.get(socketId);
+        if (!clientSocket) continue;
+
+        if (sendMessageTo(target, clientSocket.data.userId)) {
+      
+          clientSocket.emit("message_success", {
+            content: msg,
+            success: true,
+            visibility: "private"
+          });
+      
+        }
+      }
+    }
+
+  });
+
+
+
+
+
+  
+
+});
 
 const explicitOrigin = "https://charlaton-frontend.vercel.app";
 const allowedOrigins = [

@@ -26,9 +26,8 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
 /**
  * Crear o refrescar conexión
  */
-export const createConnection = async (req: Request, res: Response) => {
+export const createConnection = async (userId: any , roomId: any) => {
   try {
-    const { userId, roomId } = req.body;
 
     // Buscar conexión anterior
     const snap = await ROOMS.doc(String(roomId))
@@ -51,7 +50,7 @@ export const createConnection = async (req: Request, res: Response) => {
         .doc(id)
         .update(updated);
 
-      return res.status(200).json({ id, ...updated });
+      return {user: userId, success: true};
     }
 
     // Crear nueva conexión
@@ -65,18 +64,17 @@ export const createConnection = async (req: Request, res: Response) => {
 
     await ref.set(newConn);
 
-    res.status(201).json({ id: ref.id, ...newConn });
+    return {user: userId, success: true};
   } catch {
-    res.status(500).json({ error: "Error al crear conexión" });
+    return {user: userId, success: false};
   }
 };
 
 /**
  * Marcar salida de usuario
  */
-export const leftConnection = async (req: Request, res: Response) => {
+export const leftConnection = async (userId: any, roomId: any) => {
   try {
-    const { userId, roomId } = req.body;
 
     const snap = await ROOMS.doc(String(roomId))
       .collection("connections")
@@ -85,7 +83,7 @@ export const leftConnection = async (req: Request, res: Response) => {
       .get();
 
     if (snap.empty)
-      return res.status(404).json({ error: "Conexión no encontrada" });
+      return {user: userId, success: false};
 
     const docId = snap.docs[0].id;
 
@@ -98,8 +96,8 @@ export const leftConnection = async (req: Request, res: Response) => {
       .doc(docId)
       .update(updated);
 
-    res.json({ id: docId, ...updated });
+    return {user: userId, success: true};
   } catch {
-    res.status(500).json({ error: "Error al actualizar conexión" });
+    return {user: userId, success: true};
   }
 };

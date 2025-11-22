@@ -6,9 +6,8 @@ const ROOMS = db.collection("rooms");
 /**
  * Obtener acceso de un usuario a una sala
  */
-export const getRoomAccessForUser = async (req: Request, res: Response) => {
+export const getRoomAccessForUser = async (userId: any, roomId: any) => {
   try {
-    const { userId, roomId } = req.body;
 
     const accessSnap = await ROOMS.doc(String(roomId))
       .collection("access")
@@ -16,13 +15,13 @@ export const getRoomAccessForUser = async (req: Request, res: Response) => {
       .get();
 
     if (accessSnap.empty)
-      return res.status(404).json({ error: "Acceso no encontrado" });
+      return {userId: userId, success: false};
 
     const access = accessSnap.docs.map((d) => ({ id: d.id, ...d.data() }))[0];
 
-    res.json(access);
+    return {userId: userId,access: access, success: true};
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener acceso" });
+    return {userId: userId, success: false};
   }
 };
 
