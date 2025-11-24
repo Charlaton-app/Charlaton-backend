@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../config/db";
 import bcrypt from "bcryptjs"; 
+import admin from "firebase-admin";
 
 const SALT_ROUNDS = 10;
 
@@ -58,9 +59,9 @@ export const getUserById = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { email, nickname, password, rolId, id } = req.body;
+    const { email, name, last_name, password, birth_date, rolId } = req.body;
     
-    if (!email || !password) {
+    if (!email || !password || !name || !birth_date) {
       return res.status(400).json({ error: "Email y password son requeridos" });
     }
 
@@ -78,24 +79,17 @@ export const createUser = async (req: Request, res: Response) => {
 
     const userData = {
       email,
-      nickname: nickname || null,
+      name:  name,
+      last_name: last_name || null,
       password: hashed,
+      birth_date: birth_date,
       rolId,
       createdAt: new Date(),
     };
 
-    let doc;
-    if (id) {
-      const existingDoc = await db.collection("users").doc(id).get();
-      if (existingDoc.exists) {
-        return res.status(400).json({ error: "El usuario ya existe" });
-      }
-      await db.collection("users").doc(id).set(userData);
-      doc = await db.collection("users").doc(id).get();
-    } else {
-      const created = await db.collection("users").add(userData);
-      doc = await created.get();
-    }
+    const created = await db.collection("users").add(userData);
+    let doc = await created.get();
+
 
     res.status(201).json({ id: doc.id, ...doc.data() });
   } catch (error) {
@@ -132,14 +126,16 @@ export const changePassword = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, nickname } = req.body;
+    const { email, name, last_name } = req.body;
 
     const userDoc = await verifyUser(id, res);
     if (!userDoc) return;
 
     const updateData: any = {};
     if (email) updateData.email = email;
-    if (nickname) updateData.nickname = nickname;
+    if (name) updateData.nickname = name;
+    if (last_name) updateData.last_name = last_name;
+    
     updateData.updatedAt = new Date();
 
     await db.collection("users").doc(id).update(updateData);
@@ -158,6 +154,7 @@ export const deleteUser = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     await db.collection("users").doc(id).delete();
+    await admin.auth().deleteUser(id);
 
     res.json({ message: "Usuario eliminado" });
   } catch (error) {
