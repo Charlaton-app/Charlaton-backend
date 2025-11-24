@@ -6,9 +6,8 @@ const ROOMS = db.collection("rooms");
 /**
  * Obtener acceso de un usuario a una sala
  */
-export const getRoomAccessForUser = async (req: Request, res: Response) => {
+export const getRoomAccessForUser = async (userId: any, roomId: any) => {
   try {
-    const { userId, roomId } = req.body;
 
     const accessSnap = await ROOMS.doc(String(roomId))
       .collection("access")
@@ -16,13 +15,13 @@ export const getRoomAccessForUser = async (req: Request, res: Response) => {
       .get();
 
     if (accessSnap.empty)
-      return res.status(404).json({ error: "Acceso no encontrado" });
+      return {userId: userId, success: false};
 
     const access = accessSnap.docs.map((d) => ({ id: d.id, ...d.data() }))[0];
 
-    res.json(access);
+    return {userId: userId,access: access, success: true};
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener acceso" });
+    return {userId: userId, success: false};
   }
 };
 
@@ -50,6 +49,21 @@ export const createRoomAccess = async (req: Request, res: Response) => {
   try {
     const { userId, roomId, grantedBy } = req.body;
 
+    const roomRef = ROOMS.doc(roomId);
+    const roomDoc = await roomRef.get();
+
+    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null) {
+      return res.status(404).json({ error: "Sala no encontrada" });
+    }
+
+    const roomData = roomDoc.data();
+    const creatorId = roomData?.creatorId;
+    const adminsId = roomData?.adminsId;
+
+    if (!adminsId.includes(grantedBy) && grantedBy !== creatorId) {
+      return res.status(403).json({ error: "Solo los admins pueden dar acceso" });
+    }
+
     const accessRef = ROOMS.doc(String(roomId))
       .collection("access")
       .doc();
@@ -74,9 +88,25 @@ export const createRoomAccess = async (req: Request, res: Response) => {
 /**
  * Eliminar acceso
  */
+
 export const deleteRoomAccess = async (req: Request, res: Response) => {
   try {
-    const { userId, roomId } = req.body;
+    const { userId, roomId, grantedBy } = req.body;
+
+    const roomRef = ROOMS.doc(roomId);
+    const roomDoc = await roomRef.get();
+
+    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null) {
+      return res.status(404).json({ error: "Sala no encontrada" });
+    }
+
+    const roomData = roomDoc.data();
+    const creatorId = roomData?.creatorId;
+    const adminsId = roomData?.adminsId;
+
+    if (!adminsId.includes(grantedBy) && grantedBy !== creatorId) {
+      return res.status(403).json({ error: "Solo los admins eliminar un acceso" });
+    }
 
     const snap = await ROOMS.doc(String(roomId))
       .collection("access")
