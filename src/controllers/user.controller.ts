@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../config/db";
 import bcrypt from "bcryptjs";
 import admin from "firebase-admin";
+import { excludePassword } from "./auth.controller";
 
 const SALT_ROUNDS = 10;
 
@@ -47,11 +48,14 @@ export const getAllUsers = async (req: Request, res: Response) => {
       }
 
       const doc = snap.docs[0];
-      return res.json({ id: doc.id, ...doc.data() });
+      const userData = { id: doc.id, ...doc.data() };
+      const userResponse = await excludePassword(userData);
+      return res.json(userResponse);
     }
 
     const snap = await db.collection("users").get();
-    const users = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const usersData = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const users = await Promise.all(usersData.map(user => excludePassword(user)));
 
     res.json(users);
   } catch (error) {
@@ -76,7 +80,10 @@ export const getUserById = async (req: Request, res: Response) => {
     if (!doc.exists)
       return res.status(404).json({ error: "Usuario no encontrado" });
 
-    res.json({ id: doc.id, ...doc.data() });
+    const userData = { id: doc.id, ...doc.data() };
+    const userResponse = await excludePassword(userData);
+    
+    res.json(userResponse);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener usuario" });
   }
@@ -109,20 +116,26 @@ export const createUser = async (req: Request, res: Response) => {
 
     const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 
+    // Convert edad to number if it's a string
+    const edadNumber = typeof edad === 'string' ? parseInt(edad, 10) : Number(edad);
+    const rolIdNumber = rolId ? (typeof rolId === 'string' ? parseInt(rolId, 10) : Number(rolId)) : 2;
+
     const userData = {
       email,
       nickname: nickname || null,
       password: hashed,
-      edad: edad,
-      rolId: rolId || 2,
+      edad: edadNumber,
+      rolId: rolIdNumber,
       createdAt: admin.firestore.Timestamp.fromDate(new Date()),
       updatedAt: admin.firestore.Timestamp.fromDate(new Date()),
     };
 
     const created = await db.collection("users").add(userData);
     let doc = await created.get();
+    const userDataResponse = { id: doc.id, ...doc.data() };
+    const userResponse = await excludePassword(userDataResponse);
 
-    res.status(201).json({ id: doc.id, ...doc.data() });
+    res.status(201).json(userResponse);
   } catch (error) {
     console.error("Error creando usuario:", error);
     res.status(500).json({ error: "Error al crear usuario" });
@@ -183,15 +196,20 @@ export const updateUser = async (req: Request, res: Response) => {
     const updateData: any = {};
     if (email) updateData.email = email;
     if (nickname) updateData.nickname = nickname;
-    if (edad !== undefined) updateData.edad = edad;
+    if (edad !== undefined) {
+      // Convert edad to number if it's a string
+      updateData.edad = typeof edad === 'string' ? parseInt(edad, 10) : Number(edad);
+    }
 
     updateData.updatedAt = admin.firestore.Timestamp.fromDate(new Date());
 
     await db.collection("users").doc(id).update(updateData);
 
     const updated = await db.collection("users").doc(id).get();
+    const userData = { id: updated.id, ...updated.data() };
+    const userResponse = await excludePassword(userData);
 
-    res.json({ id: updated.id, ...updated.data() });
+    res.json(userResponse);
   } catch (error) {
     console.error("Error actualizando usuario:", error);
     res.status(500).json({ error: "Error al actualizar usuario" });

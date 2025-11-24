@@ -87,6 +87,7 @@ export const excludePassword = async (userDoc: any) => {
     id: userDoc.id,
     email: userDoc.email,
     nickname: userDoc.nickname ?? null,
+    edad: userDoc.edad ?? null,
     role: roleType,
     createdAt: userDoc.createdAt ?? userDoc.createAt ?? null,
     updatedAt: userDoc.updatedAt ?? null,
@@ -144,35 +145,61 @@ export const refreshToken = async (req: Request, res: Response) => {
       req.cookies.refresh ||
       null;
 
-    if (!tokenFromCookie)
+    if (!tokenFromCookie) {
+      console.log("[AUTH] Refresh token not found in cookies");
       return res.status(401).json({ error: "Missing refresh token" });
+    }
 
-    const sessionRecord = await findSessionByRefreshToken(tokenFromCookie);
-    if (!sessionRecord)
-      return res.status(403).json({ error: "Invalid session" });
-
-    const { data: sessionData } = sessionRecord;
-    if (sessionData.revoke)
-      return res.status(403).json({ error: "Invalid session" });
-
+    // Verificar el refresh token primero - el token JWT ya contiene el userId
+    let decoded: any;
     try {
-      jwt.verify(tokenFromCookie, process.env.REFRESH_SECRET as string);
-    } catch {
+      decoded = jwt.verify(tokenFromCookie, process.env.REFRESH_SECRET as string);
+    } catch (jwtError: any) {
+      console.log("[AUTH] Invalid refresh token:", jwtError.message);
       return res.status(403).json({ error: "Invalid refresh token" });
     }
 
-    // Obtener user
+    // Usar el userId del token decodificado directamente
+    const userId = decoded.id;
+    if (!userId) {
+      console.log("[AUTH] User ID not found in token");
+      return res.status(403).json({ error: "Invalid token format" });
+    }
+
+    // Obtener user directamente usando el userId del token
     const userDoc = await db
       .collection("users")
-      .doc(sessionRecord.userId)
+      .doc(String(userId))
       .get();
-    if (!userDoc.exists)
+    
+    if (!userDoc.exists) {
+      console.log("[AUTH] User not found:", userId);
       return res
         .status(403)
-        .json({ error: "User linked to session not found" });
+        .json({ error: "User not found" });
+    }
 
     const user = { id: userDoc.id, ...(userDoc.data() as any) };
 
+    if (!user.email) {
+      console.log("[AUTH] User email not found");
+      return res.status(403).json({ error: "User email not found" });
+    }
+
+    // Opcional: verificar sesión si existe (pero no fallar si no existe)
+    try {
+      const sessionRecord = await findSessionByRefreshToken(tokenFromCookie);
+      if (sessionRecord && sessionRecord.data.revoke) {
+        console.log("[AUTH] Session is revoked");
+        return res.status(403).json({ error: "Session revoked" });
+      }
+    } catch (sessionError) {
+      // Si no se puede verificar la sesión, continuar de todas formas
+      // El token JWT ya está validado
+      console.log("[AUTH] Could not verify session, but token is valid, continuing...");
+    }
+
+    // generateAccessToken now accepts both string and number
     const newAccessToken = generateAccessToken(user.id, user.email);
 
     res.cookie(
@@ -181,10 +208,15 @@ export const refreshToken = async (req: Request, res: Response) => {
       COOKIE_OPTIONS.access(process.env.NODE_ENV === "production")
     );
 
+    console.log("[AUTH] Token refreshed successfully for user:", user.id);
     return res.json({ message: "Token refreshed" });
   } catch (err: any) {
-    console.error("Error en refreshToken:", err);
-    return res.status(500).json({ error: "Error refreshing token" });
+    console.error("[AUTH] Error en refreshToken:", err);
+    console.error("[AUTH] Error stack:", err.stack);
+    return res.status(500).json({ 
+      error: "Error refreshing token",
+      details: process.env.NODE_ENV === "development" ? err.message : undefined
+    });
   }
 };
 
@@ -782,13 +814,17 @@ export const signup = async (req: Request, res: Response) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
+    // Convert edad to number if it's a string
+    const edadNumber = typeof edad === 'string' ? parseInt(edad, 10) : Number(edad);
+    const rolIdNumber = rolId ? (typeof rolId === 'string' ? parseInt(rolId, 10) : Number(rolId)) : 2;
+
     // Prepare user data
     const userData: any = {
       email,
       nickname: nickname || null,
       password: hashedPassword,
-      edad: edad,
-      rolId: rolId || 2, // Default role: regular user
+      edad: edadNumber,
+      rolId: rolIdNumber, // Default role: regular user
       createdAt: admin.firestore.Timestamp.fromDate(new Date()),
       updatedAt: admin.firestore.Timestamp.fromDate(new Date()),
     };

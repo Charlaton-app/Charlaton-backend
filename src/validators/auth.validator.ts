@@ -31,6 +31,7 @@ export const signupValidation = [
   body("edad")
     .notEmpty()
     .withMessage("Age (edad) is required")
+    .toInt()
     .isInt({ min: 1, max: 120 })
     .withMessage("Age must be a valid number between 1 and 120"),
 

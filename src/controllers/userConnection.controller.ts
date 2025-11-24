@@ -36,7 +36,7 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
 };
 
 /**
- * Create or refresh user connection to a room
+ * Create or refresh user connection to a room (auxiliary function)
  * If an active connection exists, updates joinedAt timestamp
  * Otherwise, creates a new connection
  * 
@@ -45,7 +45,7 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
  * @param {any} roomId - Room ID being joined
  * @returns {Promise<object>} Object with user and success status
  */
-export const createConnection = async (userId: any , roomId: any) => {
+export const createConnectionAux = async (userId: any , roomId: any) => {
   try {
 
     // Search for previous active connection
@@ -90,7 +90,7 @@ export const createConnection = async (userId: any , roomId: any) => {
 };
 
 /**
- * Mark user exit from room
+ * Mark user exit from room (auxiliary function)
  * Sets leftAt timestamp for active connection
  * 
  * @async
@@ -98,7 +98,7 @@ export const createConnection = async (userId: any , roomId: any) => {
  * @param {any} roomId - Room ID being left
  * @returns {Promise<object>} Object with user and success status
  */
-export const leftConnection = async (userId: any, roomId: any) => {
+export const leftConnectionAux = async (userId: any, roomId: any) => {
   try {
 
     const snap = await ROOMS.doc(String(roomId))
@@ -124,5 +124,63 @@ export const leftConnection = async (userId: any, roomId: any) => {
     return {user: userId, success: true};
   } catch {
     return {user: userId, success: true};
+  }
+};
+
+/**
+ * HTTP Controller: Create or refresh user connection to a room
+ * 
+ * @async
+ * @param {Request} req - Express request object (userId and roomId in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON response with connection data or error
+ */
+export const createConnection = async (req: Request, res: Response) => {
+  try {
+    const { userId, roomId } = req.body;
+
+    if (!userId || !roomId) {
+      return res.status(400).json({ error: "userId and roomId are required" });
+    }
+
+    const result = await createConnectionAux(userId, roomId);
+
+    if (!result.success) {
+      return res.status(500).json({ error: "Error al crear conexión" });
+    }
+
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error("Error in createConnection:", error);
+    return res.status(500).json({ error: "Error al crear conexión" });
+  }
+};
+
+/**
+ * HTTP Controller: Mark user exit from room
+ * 
+ * @async
+ * @param {Request} req - Express request object (userId and roomId in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON response with success or error
+ */
+export const leftConnection = async (req: Request, res: Response) => {
+  try {
+    const { userId, roomId } = req.body;
+
+    if (!userId || !roomId) {
+      return res.status(400).json({ error: "userId and roomId are required" });
+    }
+
+    const result = await leftConnectionAux(userId, roomId);
+
+    if (!result.success) {
+      return res.status(500).json({ error: "Error al salir de la sala" });
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error in leftConnection:", error);
+    return res.status(500).json({ error: "Error al salir de la sala" });
   }
 };

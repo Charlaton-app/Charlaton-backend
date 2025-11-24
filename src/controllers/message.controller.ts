@@ -4,22 +4,36 @@ import { db } from "../config/db";
 
 /**
  * Controller to get all messages from a specific room ordered by creation date
+ * Supports query params: roomId, limit, offset
  * 
  * @async
- * @param {Request} req - Express request object (roomId in params)
+ * @param {Request} req - Express request object (roomId in params or query)
  * @param {Response} res - Express response object
  * @returns {Promise<Response>} JSON array of messages or error message
  */
 export const getAllMessagesByRoom = async (req: Request, res: Response) => {
   try {
-    const { roomId } = req.params;
+    const roomId = req.params.roomId || req.query.roomId as string;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+    const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
 
-    const snap = await db
+    if (!roomId) {
+      return res.status(400).json({ error: "roomId is required" });
+    }
+
+    let query = db
       .collection("rooms")
       .doc(roomId)
       .collection("messages")
-      .orderBy("createAt", "asc")
-      .get();
+      .orderBy("createAt", "asc");
+
+    // Firestore doesn't support offset directly, so we'll just use limit
+    // For pagination, you'd typically use startAfter with the last document
+    if (limit > 0) {
+      query = query.limit(limit);
+    }
+
+    const snap = await query.get();
 
     const messages = snap.docs.map((d) => ({
       id: d.id,

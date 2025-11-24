@@ -11,9 +11,9 @@ import { Server } from "socket.io";
 import http from "http";
 import jwt from "jsonwebtoken";
 import { db } from "./config/db";
-import { createConnection } from "./controllers/userConnection.controller";
+import { createConnectionAux } from "./controllers/userConnection.controller";
 import { getRoomAccessForUser } from "./controllers/roomAccess.controller";
-import { leftConnection } from "./controllers/userConnection.controller";
+import { leftConnectionAux } from "./controllers/userConnection.controller";
 import { createMessage, sendMessageTo } from "./controllers/message.controller";
 import { existsAdmin, getAdminsInRoom } from "./functions/room.functions";
 import { createRoomAccess } from "./functions/roomAccess.functions";
@@ -67,7 +67,7 @@ io.on("connection", async (socket) => {
 
     console.log("usuario ingresa a la sala...");
 
-    const connectionSnap = await createConnection(userId, roomId);
+    const connectionSnap = await createConnectionAux(userId, roomId);
 
     if (!connectionSnap.success){
 
@@ -86,7 +86,7 @@ io.on("connection", async (socket) => {
     const userId = socket.data.userId;
     const roomId = socket.data.roomId;
 
-    await leftConnection(userId, roomId);
+    await leftConnectionAux(userId, roomId);
 
     socket.to(roomId).emit("disconnect",{user:user, message: "usuario desconectado", success: true});
 

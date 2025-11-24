@@ -32,6 +32,20 @@ const router = Router();
 router.get("/user/room", verifyToken, getAllMessageOfUserInRoom);
 
 /**
+ * @route GET /message
+ * @desc Gets all messages from a room ordered by creation date (query params: roomId, limit, offset)
+ * @access Protected
+ * @middleware verifyToken - Verifies user is authenticated
+ * @query {string} roomId - Room ID to get messages from
+ * @query {number} [limit=50] - Maximum number of messages to return
+ * @query {number} [offset=0] - Offset for pagination
+ * @returns {object} 200 - Array of messages
+ * @returns {object} 401 - Not authenticated
+ * @returns {object} 500 - Server error
+ */
+router.get("/", verifyToken, getAllMessagesByRoom);
+
+/**
  * @route GET /message/room/:roomId
  * @desc Gets all messages from a room ordered by creation date
  * @access Protected

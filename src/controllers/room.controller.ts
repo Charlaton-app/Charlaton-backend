@@ -157,6 +157,32 @@ export const getRoomById = async (req: Request, res: Response) => {
  *   private: true
  * }
  */
+/**
+ * Generate a simple room ID with format: 3 letters-3 letters
+ * Example: abc-xyz
+ * Checks for collisions and retries if needed
+ */
+const generateSimpleRoomId = async (): Promise<string> => {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  const getRandomLetters = (count: number) => {
+    return Array.from({ length: count }, () => 
+      letters[Math.floor(Math.random() * letters.length)]
+    ).join('');
+  };
+  
+  // Try up to 10 times to find a unique ID
+  for (let i = 0; i < 10; i++) {
+    const roomId = `${getRandomLetters(3)}-${getRandomLetters(3)}`;
+    const doc = await ROOMS.doc(roomId).get();
+    if (!doc.exists) {
+      return roomId;
+    }
+  }
+  
+  // Fallback: if all attempts fail, use a longer ID with timestamp
+  return `${getRandomLetters(3)}-${getRandomLetters(3)}-${Date.now().toString(36).slice(-3)}`;
+};
+
 export const createRoom = async (req: Request, res: Response) => {
   try {
     const {
@@ -169,7 +195,9 @@ export const createRoom = async (req: Request, res: Response) => {
       adminsId, // receives the admins
     } = req.body;
 
-    const newRoomRef = ROOMS.doc();
+    // Generate simple room ID
+    const roomId = await generateSimpleRoomId();
+    const newRoomRef = ROOMS.doc(roomId);
 
 
     const setAdminsId = new Set<String>(adminsId); // creates a set from admins (which is a JSON with a list)
@@ -230,90 +258,6 @@ export const changePassword = async (req: Request, res: Response) => {
     res.json({ message: "Contraseña actualizada" });
   } catch {
     res.status(500).json({ error: "Error actualizando contraseña" });
-  }
-};
-
-/*
-Elimina un admin al grupo de los admins
-*/
-
-export const removeAdmin = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;         // id de la room
-    const { adminToRemove, userId } = req.body; 
-    // userId = el que está haciendo la petición
-
-    const roomRef = ROOMS.doc(id);
-    const roomDoc = await roomRef.get();
-
-    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null) {
-      return res.status(404).json({ error: "Sala no encontrada" });
-    }
-
-    const roomData = roomDoc.data();
-    const admins = roomData?.adminId || [];
-    const creatorId = roomData?.creatorId;
-
-    // 1. Validar que SOLO el creador pueda eliminar
-    if (userId !== creatorId) {
-      return res.status(403).json({ error: "Solo el creador puede eliminar admins" });
-    }
-
-    // 2. Evitar que el creador se elimine a sí mismo
-    if (adminToRemove === creatorId) {
-      return res.status(400).json({ error: "El creador no puede eliminarse a sí mismo" });
-    }
-
-    // 3. Convertir a Set y eliminar
-    const adminSet = new Set<string>(admins);
-    adminSet.delete(adminToRemove);
-
-    await roomRef.update({
-      adminId: [...adminSet]
-    });
-
-    return res.json({
-      success: true,
-      adminId: [...adminSet]
-    });
-
-  } catch (error) {
-    console.error("Error eliminando admin:", error);
-    return res.status(500).json({ error: "Error al eliminar admin" });
-  }
-};
-
-
-/*
-Añade un nuevo admin al grupo de los admins
-*/
-
-export const addAdmin = async (req: Request, res: Response) => {
-
-  try{
-
-    const { id } = req.params;
-    const { newAdmin } = req.body;
-
-    const roomDoc = await ROOMS.doc(id).get();
-    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null)
-      return res.status(404).json({ error: "Sala no encontrada" });
-
-    const actualAdmins = roomDoc.data()?.adminId;
-
-    const setActualAdmins = new Set<string>(actualAdmins);
-
-    setActualAdmins.add(newAdmin);
-
-    await ROOMS.doc(id).update({
-      adminsId: [...setActualAdmins]
-    });
-
-    res.json({ id, ...roomDoc.data()});
-
-  } catch (error){
-    console.error("Error actualizando admins:", error);
-    res.status(500).json({ error: "Error al actualizar admins" });
   }
 };
 

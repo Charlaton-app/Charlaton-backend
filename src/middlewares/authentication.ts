@@ -21,11 +21,11 @@ declare global {
  * Genera un access token JWT con validez de 15 minutos.
  * El token contiene el ID del usuario y su email.
  *
- * @param {number} userId - ID del usuario
+ * @param {number|string} userId - ID del usuario (puede ser número o string)
  * @param {string} email - Email del usuario
  * @returns {string} Token JWT firmado con la clave ACCESS_SECRET
  */
-export function generateAccessToken(userId: number, email: string) {
+export function generateAccessToken(userId: number | string, email: string) {
   const ACCESS_SECRET = process.env.ACCESS_SECRET as string;
   return jwt.sign({ id: userId, email }, ACCESS_SECRET, { expiresIn: "15m" });
 }
@@ -34,10 +34,10 @@ export function generateAccessToken(userId: number, email: string) {
  * Genera un refresh token JWT con validez de 7 días.
  * El token contiene únicamente el ID del usuario.
  *
- * @param {number} userId - ID del usuario
+ * @param {number|string} userId - ID del usuario (puede ser número o string)
  * @returns {string} Token JWT firmado con la clave REFRESH_SECRET
  */
-export function generateRefreshToken(userId: number) {
+export function generateRefreshToken(userId: number | string) {
   const REFRESH_SECRET = process.env.REFRESH_SECRET as string;
   return jwt.sign({ id: userId }, REFRESH_SECRET, { expiresIn: "7d" });
 }
