@@ -6,6 +6,7 @@ export interface UserCreateInput {
   email: string;
   nickname?: string;
   password: string;
+  edad: number;
   rolId?: number;
 }
 
@@ -17,6 +18,7 @@ export interface UserResponse {
   id: string;
   email: string;
   nickname?: string | null;
+  edad: number;
   role?: string | null;
   createdAt: Date;
   updatedAt?: Date;

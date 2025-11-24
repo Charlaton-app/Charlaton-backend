@@ -3,7 +3,7 @@ import { Request, Response, NextFunction } from "express";
 
 /**
  * Array de validaciones para el registro de usuario (signup).
- * Valida email, password y opcionalmente nickname según reglas específicas.
+ * Valida email, password, edad y opcionalmente nickname según reglas específicas.
  *
  * @type {Array<ValidationChain>}
  * @constant
@@ -11,6 +11,7 @@ import { Request, Response, NextFunction } from "express";
  * Validation rules:
  * - email: required, valid email format, normalized
  * - password: minimum 6 characters (compatible with Firebase)
+ * - edad: required, must be a positive integer
  * - nickname: optional, minimum 2 characters if provided
  * - confirmPassword: must match password if provided
  */
@@ -26,6 +27,12 @@ export const signupValidation = [
   body("password")
     .isLength({ min: 6 })
     .withMessage("Password must be at least 6 characters long"),
+
+  body("edad")
+    .notEmpty()
+    .withMessage("Age (edad) is required")
+    .isInt({ min: 1, max: 120 })
+    .withMessage("Age must be a valid number between 1 and 120"),
 
   body("nickname")
     .optional()

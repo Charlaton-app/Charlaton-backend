@@ -757,12 +757,12 @@ export const resetPass = async (req: Request, res: Response) => {
 export const signup = async (req: Request, res: Response) => {
   try {
     console.log("[AUTH] Signup request received");
-    const { id, email, nickname, password, rolId } = req.body;
+    const { id, email, nickname, password, edad, rolId } = req.body;
 
     // Validate required fields
-    if (!email || !password) {
+    if (!email || !password || !edad) {
       console.log("[AUTH] Signup failed: Missing required fields");
-      return res.status(400).json({ error: "Email and password are required" });
+      return res.status(400).json({ error: "Email, password and edad are required" });
     }
 
     console.log(`[AUTH] Checking if email ${email} already exists`);
@@ -787,6 +787,7 @@ export const signup = async (req: Request, res: Response) => {
       email,
       nickname: nickname || null,
       password: hashedPassword,
+      edad: edad,
       rolId: rolId || 2, // Default role: regular user
       createdAt: admin.firestore.Timestamp.fromDate(new Date()),
       updatedAt: admin.firestore.Timestamp.fromDate(new Date()),

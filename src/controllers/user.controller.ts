@@ -94,10 +94,10 @@ export const getUserById = async (req: Request, res: Response) => {
  */
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { email, nickname, password, rolId } = req.body;
+    const { email, nickname, password, edad, rolId } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email y password son requeridos" });
+    if (!email || !password || !edad) {
+      return res.status(400).json({ error: "Email, password y edad son requeridos" });
     }
 
     // Validar si el correo ya existe
@@ -113,6 +113,7 @@ export const createUser = async (req: Request, res: Response) => {
       email,
       nickname: nickname || null,
       password: hashed,
+      edad: edad,
       rolId: rolId || 2,
       createdAt: admin.firestore.Timestamp.fromDate(new Date()),
       updatedAt: admin.firestore.Timestamp.fromDate(new Date()),
@@ -174,7 +175,7 @@ export const changePassword = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, nickname } = req.body;
+    const { email, nickname, edad } = req.body;
 
     const userDoc = await verifyUser(id, res);
     if (!userDoc) return;
@@ -182,6 +183,7 @@ export const updateUser = async (req: Request, res: Response) => {
     const updateData: any = {};
     if (email) updateData.email = email;
     if (nickname) updateData.nickname = nickname;
+    if (edad !== undefined) updateData.edad = edad;
 
     updateData.updatedAt = admin.firestore.Timestamp.fromDate(new Date());
 
