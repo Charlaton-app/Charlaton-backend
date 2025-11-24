@@ -1,4 +1,3 @@
-import { Request, Response } from "express";
 import { db } from "../config/db";
 
 const ROOMS = db.collection("rooms");
@@ -6,9 +5,8 @@ const ROOMS = db.collection("rooms");
 /**
  * Obtener conexiones de una sala
  */
-export const getConnectionsByRoom = async (req: Request, res: Response) => {
+export const getConnectionsByRoom = async (roomId: any) => {
   try {
-    const { roomId } = req.params;
 
     const snap = await ROOMS.doc(roomId).collection("connections").get();
 
@@ -17,9 +15,9 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
       ...d.data(),
     }));
 
-    res.json(connections);
+    return {connections: connections, message: "conexiones encontradas", success: true};
   } catch {
-    res.status(500).json({ error: "Error al obtener conexiones" });
+    return {message: "conexiones no encontradas", success: true};
   }
 };
 
@@ -50,7 +48,7 @@ export const createConnection = async (userId: any , roomId: any) => {
         .doc(id)
         .update(updated);
 
-      return {user: userId, success: true};
+      return {user: userId, connection: updated, success: true};
     }
 
     // Crear nueva conexión
@@ -64,9 +62,9 @@ export const createConnection = async (userId: any , roomId: any) => {
 
     await ref.set(newConn);
 
-    return {user: userId, success: true};
+    return {user: userId, connection: newConn, success: true};
   } catch {
-    return {user: userId, success: false};
+    return {user: userId, connection: null, success: false};
   }
 };
 
@@ -83,7 +81,7 @@ export const leftConnection = async (userId: any, roomId: any) => {
       .get();
 
     if (snap.empty)
-      return {user: userId, success: false};
+      return {user: userId, connection: null, success: false};
 
     const docId = snap.docs[0].id;
 
@@ -91,13 +89,13 @@ export const leftConnection = async (userId: any, roomId: any) => {
       leftAt: new Date().toISOString(),
     };
 
-    await ROOMS.doc(String(roomId))
+    const update = await ROOMS.doc(String(roomId))
       .collection("connections")
       .doc(docId)
       .update(updated);
 
-    return {user: userId, success: true};
+    return {user: userId, connection: update, success: true};
   } catch {
-    return {user: userId, success: true};
+    return {user: userId, connection: null, success: true};
   }
 };
