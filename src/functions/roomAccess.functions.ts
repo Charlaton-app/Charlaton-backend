@@ -1,10 +1,21 @@
+/**
+ * Room Access Functions
+ * Helper functions for managing room access permissions
+ * 
+ * @module functions/roomAccess
+ */
 
 import { db } from "../config/db";
 
 const ROOMS = db.collection("rooms");
 
 /**
- * Obtener acceso de un usuario a una sala
+ * Get room access for a specific user
+ * 
+ * @async
+ * @param {any} userId - User ID to check access
+ * @param {any} roomId - Room ID to verify access to
+ * @returns {Promise<object>} Object with userId, access data, and success status
  */
 export const getRoomAccessForUser = async (userId: any, roomId: any) => {
   try {
@@ -26,7 +37,11 @@ export const getRoomAccessForUser = async (userId: any, roomId: any) => {
 };
 
 /**
- * Obtener todos los accesos de una sala
+ * Get all access permissions for a room
+ * 
+ * @async
+ * @param {any} roomId - Room ID to get access permissions from
+ * @returns {Promise<object>} Object with roomId, message, and success status
  */
 export const getRoomAccessByRoomId = async (roomId: any) => {
   try {
@@ -35,14 +50,20 @@ export const getRoomAccessByRoomId = async (roomId: any) => {
 
     const access = accessSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    return {roomId: roomId, message : "accesos obtenidos correctamente", success: true};
+    return {roomId: roomId, message : "access permissions retrieved successfully", success: true};
   } catch (error) {
-    return {roomId: roomId, message : "error al obtener accesos", success: false};
+    return {roomId: roomId, message : "error retrieving access permissions", success: false};
   }
 };
 
 /**
- * Crear acceso a sala
+ * Create room access permission
+ * 
+ * @async
+ * @param {any} userId - User ID to grant access
+ * @param {any} roomId - Room ID to grant access to
+ * @param {any} grantedBy - Admin/creator ID granting the access
+ * @returns {Promise<object>} Object with access ID, data, message, and success status
  */
 export const createRoomAccess = async (userId: any, roomId: any, grantedBy: any) => {
   try {
@@ -59,15 +80,20 @@ export const createRoomAccess = async (userId: any, roomId: any, grantedBy: any)
 
     await accessRef.set(accessData);
 
-    return {id: accessRef.id, ...accessData, message: "aceso a sala creado correctamente", success: true };
+    return {id: accessRef.id, ...accessData, message: "room access created successfully", success: true };
 
   } catch (error) {
-    return {id:null, message: "error al crear acceso", success: false};
+    return {id:null, message: "error creating access", success: false};
   }
 };
 
 /**
- * Eliminar acceso
+ * Delete room access permission
+ * 
+ * @async
+ * @param {any} userId - User ID to revoke access from
+ * @param {any} roomId - Room ID to revoke access to
+ * @returns {Promise<object>} Object with access data, message, and success status
  */
 export const deleteRoomAccess = async (userId: any, roomId: any) => {
   try {
@@ -78,14 +104,14 @@ export const deleteRoomAccess = async (userId: any, roomId: any) => {
       .get();
 
     if (snap.empty)
-      return {access: null, message: "error al eliminar acceso", success: false};
+      return {access: null, message: "error deleting access", success: false};
 
     const docId = snap.docs[0].id;
 
     await ROOMS.doc(String(roomId)).collection("access").doc(docId).delete();
 
-    return {access: snap, message: "acceso eliminado", success: true};
+    return {access: snap, message: "access deleted", success: true};
   } catch (error) {
-    return {access: null, message: "error al eliminar acceso", success: false};
+    return {access: null, message: "error deleting access", success: false};
   }
 };

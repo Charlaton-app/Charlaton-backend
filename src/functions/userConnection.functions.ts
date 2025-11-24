@@ -1,9 +1,20 @@
+/**
+ * User Connection Functions
+ * Helper functions for managing user connections/sessions in rooms
+ * 
+ * @module functions/userConnection
+ */
+
 import { db } from "../config/db";
 
 const ROOMS = db.collection("rooms");
 
 /**
- * Obtener conexiones de una sala
+ * Get all connections for a specific room
+ * 
+ * @async
+ * @param {any} roomId - Room ID to get connections from
+ * @returns {Promise<object>} Object with connections array, message, and success status
  */
 export const getConnectionsByRoom = async (roomId: any) => {
   try {
@@ -15,19 +26,26 @@ export const getConnectionsByRoom = async (roomId: any) => {
       ...d.data(),
     }));
 
-    return {connections: connections, message: "conexiones encontradas", success: true};
+    return {connections: connections, message: "connections found", success: true};
   } catch {
-    return {message: "conexiones no encontradas", success: true};
+    return {message: "connections not found", success: true};
   }
 };
 
 /**
- * Crear o refrescar conexión
+ * Create or refresh user connection to a room
+ * If an active connection exists, updates joinedAt timestamp
+ * Otherwise, creates a new connection
+ * 
+ * @async
+ * @param {any} userId - User ID joining the room
+ * @param {any} roomId - Room ID being joined
+ * @returns {Promise<object>} Object with user, connection data, and success status
  */
 export const createConnection = async (userId: any , roomId: any) => {
   try {
 
-    // Buscar conexión anterior
+    // Search for previous connection
     const snap = await ROOMS.doc(String(roomId))
       .collection("connections")
       .where("userId", "==", Number(userId))
@@ -35,7 +53,7 @@ export const createConnection = async (userId: any , roomId: any) => {
       .get();
 
     if (!snap.empty) {
-      // Refrescar conexión existente
+      // Refresh existing connection
       const id = snap.docs[0].id;
 
       const updated = {
@@ -51,7 +69,7 @@ export const createConnection = async (userId: any , roomId: any) => {
       return {user: userId, connection: updated, success: true};
     }
 
-    // Crear nueva conexión
+    // Create new connection
     const ref = ROOMS.doc(String(roomId)).collection("connections").doc();
 
     const newConn = {
@@ -69,7 +87,13 @@ export const createConnection = async (userId: any , roomId: any) => {
 };
 
 /**
- * Marcar salida de usuario
+ * Mark user exit from room
+ * Sets leftAt timestamp for active connection
+ * 
+ * @async
+ * @param {any} userId - User ID leaving the room
+ * @param {any} roomId - Room ID being left
+ * @returns {Promise<object>} Object with user, connection data, and success status
  */
 export const leftConnection = async (userId: any, roomId: any) => {
   try {

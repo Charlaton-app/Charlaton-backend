@@ -301,13 +301,27 @@ export const loginOAuth = async (req: Request, res: Response) => {
  * @param {Response} res - Objeto de respuesta de Express
  * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito y datos del usuario sin contraseña
  */
+/**
+ * Login with email and password
+ * Authenticates user and creates session with cookies
+ *
+ * @async
+ * @param {Request} req - Express request object with email and password in body
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON response with user data or error
+ */
 export const login = async (req: Request, res: Response) => {
   try {
+    console.log("[AUTH] Login request received");
     const { email, password } = req.body;
     let deviceId = req.cookies.deviceId || req.cookies.deviceid || undefined;
 
-    if (!email || !password)
+    if (!email || !password) {
+      console.log("[AUTH] Login failed: Missing email or password");
       return res.status(400).json({ error: "Email and password required" });
+    }
+
+    console.log(`[AUTH] Attempting login for email: ${email}`);
 
     // Buscar usuario por email (collection "users")
     const userSnap = await db
@@ -316,8 +330,12 @@ export const login = async (req: Request, res: Response) => {
       .limit(1)
       .get();
 
-    if (userSnap.empty)
+    if (userSnap.empty) {
+      console.log(`[AUTH] Login failed: User not found for email ${email}`);
       return res.status(401).json({ error: "Credenciales inválidas" });
+    }
+
+    console.log(`[AUTH] User found in database`);
 
     const userDoc = userSnap.docs[0];
     const user = { id: userDoc.id, ...(userDoc.data() as any) };
@@ -329,6 +347,7 @@ export const login = async (req: Request, res: Response) => {
     let isPasswordValid = false;
 
     if (isOAuthPassword) {
+      console.log(`[AUTH] OAuth login detected for user ${user.id}`);
       // Para OAuth, Firebase ya autenticó al usuario, así que permitir login
       // Intentar verificar si la contraseña guardada también es OAuth (puede estar hasheada)
       try {
@@ -338,18 +357,27 @@ export const login = async (req: Request, res: Response) => {
         isPasswordValid = true;
       }
     } else {
+      console.log(`[AUTH] Validating password with bcrypt for user ${user.id}`);
       // Para contraseñas normales, verificar con bcrypt
       isPasswordValid = await bcrypt.compare(password, user.password);
     }
 
-    if (!isPasswordValid)
+    if (!isPasswordValid) {
+      console.log(`[AUTH] Login failed: Invalid password for user ${user.id}`);
       return res.status(401).json({ error: "Credenciales inválidas" });
+    }
 
+    console.log(`[AUTH] Password validated successfully for user ${user.id}`);
+
+    console.log(`[AUTH] Generating tokens for user ${user.id}`);
     const accessToken = generateAccessToken(user.id, user.email);
     const refreshToken = generateRefreshToken(user.id);
 
     if (!deviceId) {
       deviceId = crypto.randomUUID();
+      console.log(`[AUTH] New device ID generated: ${deviceId}`);
+    } else {
+      console.log(`[AUTH] Using existing device ID: ${deviceId}`);
     }
 
     const sessionsColRef = db
@@ -365,6 +393,7 @@ export const login = async (req: Request, res: Response) => {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
 
     if (existingSessionSnap.exists) {
+      console.log(`[AUTH] Updating existing session for device ${deviceId}`);
       await existingSessionRef.update({
         refreshToken,
         lastUsedAt: admin.firestore.Timestamp.fromDate(now),
@@ -373,6 +402,7 @@ export const login = async (req: Request, res: Response) => {
         revoke: false,
       });
     } else {
+      console.log(`[AUTH] Creating new session for device ${deviceId}`);
       await existingSessionRef.set({
         tokenId: crypto.randomUUID(),
         refreshToken,
@@ -387,17 +417,19 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Set cookies (nombres iguales a los que usabas)
+    console.log(`[AUTH] Setting authentication cookies`);
     const prod = process.env.NODE_ENV === "production";
     res.cookie("AccessToken", accessToken, COOKIE_OPTIONS.access(prod));
     res.cookie("RefreshToken", refreshToken, COOKIE_OPTIONS.refresh(prod));
     res.cookie("deviceId", deviceId, COOKIE_OPTIONS.device(prod));
 
+    console.log(`[AUTH] Login successful for user ${user.id}`);
     return res.status(200).json({
       message: "Inicio de sesión exitoso",
       user: await excludePassword(user),
     });
   } catch (error) {
-    console.error("Error en login:", error);
+    console.error("[AUTH] Error in login:", error);
     return res.status(500).json({ error: "Error al iniciar sesión" });
   }
 };
@@ -706,5 +738,124 @@ export const resetPass = async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("Error en resetPass:", err);
     return res.status(500).json({ message: "Inténtalo de nuevo más tarde" });
+  }
+};
+
+// ---------------------------
+// signup
+// ---------------------------
+/**
+ * Controller for user registration.
+ * Creates a new user in Firestore with hashed password,
+ * then automatically logs them in by creating a session.
+ *
+ * @async
+ * @param {Request} req - Express request object (must contain email, password, and optionally nickname, birth_date in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON response with success message and user data (without password)
+ */
+export const signup = async (req: Request, res: Response) => {
+  try {
+    console.log("[AUTH] Signup request received");
+    const { id, email, nickname, password, edad, rolId } = req.body;
+
+    // Validate required fields
+    if (!email || !password || !edad) {
+      console.log("[AUTH] Signup failed: Missing required fields");
+      return res.status(400).json({ error: "Email, password and edad are required" });
+    }
+
+    console.log(`[AUTH] Checking if email ${email} already exists`);
+    // Check if email already exists
+    const existingUser = await db
+      .collection("users")
+      .where("email", "==", email)
+      .limit(1)
+      .get();
+
+    if (!existingUser.empty) {
+      console.log(`[AUTH] Signup failed: Email ${email} already registered`);
+      return res.status(400).json({ error: "El correo ya está registrado" });
+    }
+
+    console.log("[AUTH] Hashing password");
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+    // Prepare user data
+    const userData: any = {
+      email,
+      nickname: nickname || null,
+      password: hashedPassword,
+      edad: edad,
+      rolId: rolId || 2, // Default role: regular user
+      createdAt: admin.firestore.Timestamp.fromDate(new Date()),
+      updatedAt: admin.firestore.Timestamp.fromDate(new Date()),
+    };
+
+    // If Firebase UID is provided (from Firebase Auth), store it
+    if (id) {
+      userData.uid = id;
+      console.log(`[AUTH] Creating user with Firebase UID: ${id}`);
+    }
+
+    console.log("[AUTH] Creating user document in Firestore");
+    // Create user in Firestore
+    const userRef = id
+      ? await db.collection("users").doc(id).set(userData)
+      : await db.collection("users").add(userData);
+
+    const userId = id || (userRef as admin.firestore.DocumentReference).id;
+    console.log(`[AUTH] User created successfully with ID: ${userId}`);
+
+    // Get the created user
+    const userDoc = await db.collection("users").doc(userId).get();
+    const user = { id: userDoc.id, ...(userDoc.data() as any) };
+
+    // Auto-login: create session
+    console.log("[AUTH] Creating session for new user");
+    const deviceId =
+      req.cookies.deviceId || req.cookies.deviceid || crypto.randomUUID();
+    const accessToken = generateAccessToken(user.id, user.email);
+    const refreshToken = generateRefreshToken(user.id);
+
+    const sessionsColRef = db
+      .collection("users")
+      .doc(user.id)
+      .collection("sessions");
+    const sessionDocId = deviceId;
+
+    const now = new Date();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await sessionsColRef.doc(sessionDocId).set({
+      tokenId: crypto.randomUUID(),
+      refreshToken,
+      deviceId,
+      userAgent: req.headers["user-agent"] || "Unknown",
+      ip: req.ip || req.headers["x-forwarded-for"] || "unknown",
+      expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+      revoke: false,
+      createdAt: admin.firestore.Timestamp.fromDate(now),
+      lastUsedAt: admin.firestore.Timestamp.fromDate(now),
+    });
+
+    const prod = process.env.NODE_ENV === "production";
+    res.cookie("AccessToken", accessToken, COOKIE_OPTIONS.access(prod));
+    res.cookie("RefreshToken", refreshToken, COOKIE_OPTIONS.refresh(prod));
+    res.cookie("deviceId", deviceId, COOKIE_OPTIONS.device(prod));
+
+    console.log(`[AUTH] Signup successful for user: ${userId}`);
+
+    // Return user without password
+    const userResponse = await excludePassword(user);
+
+    return res.status(201).json({
+      message: "Usuario creado exitosamente",
+      user: userResponse,
+    });
+  } catch (error: any) {
+    console.error("[AUTH] Error in signup:", error);
+    return res.status(500).json({ error: "Error al crear usuario" });
   }
 };

@@ -94,10 +94,10 @@ export const getUserById = async (req: Request, res: Response) => {
  */
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { email, name, last_name, password, birth_date, rolId } = req.body;
+    const { email, nickname, password, edad, rolId } = req.body;
 
-    if (!email || !password || !name || !birth_date) {
-      return res.status(400).json({ error: "Email y password son requeridos" });
+    if (!email || !password || !edad) {
+      return res.status(400).json({ error: "Email, password y edad son requeridos" });
     }
 
     // Validar si el correo ya existe
@@ -111,12 +111,12 @@ export const createUser = async (req: Request, res: Response) => {
 
     const userData = {
       email,
-      name: name,
-      last_name: last_name || null,
+      nickname: nickname || null,
       password: hashed,
-      birth_date: birth_date,
-      rolId,
-      createdAt: new Date(),
+      edad: edad,
+      rolId: rolId || 2,
+      createdAt: admin.firestore.Timestamp.fromDate(new Date()),
+      updatedAt: admin.firestore.Timestamp.fromDate(new Date()),
     };
 
     const created = await db.collection("users").add(userData);
@@ -175,17 +175,17 @@ export const changePassword = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { email, name, last_name } = req.body;
+    const { email, nickname, edad } = req.body;
 
     const userDoc = await verifyUser(id, res);
     if (!userDoc) return;
 
     const updateData: any = {};
     if (email) updateData.email = email;
-    if (name) updateData.nickname = name;
-    if (last_name) updateData.last_name = last_name;
+    if (nickname) updateData.nickname = nickname;
+    if (edad !== undefined) updateData.edad = edad;
 
-    updateData.updatedAt = new Date();
+    updateData.updatedAt = admin.firestore.Timestamp.fromDate(new Date());
 
     await db.collection("users").doc(id).update(updateData);
 

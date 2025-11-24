@@ -1,10 +1,22 @@
+/**
+ * Room Access Controller
+ * Handles user access permissions for rooms
+ * 
+ * @module controllers/roomAccess
+ */
+
 import { Request, Response } from "express";
 import { db } from "../config/db";
 
 const ROOMS = db.collection("rooms");
 
 /**
- * Obtener acceso de un usuario a una sala
+ * Get room access for a specific user
+ * 
+ * @async
+ * @param {any} userId - User ID to check access
+ * @param {any} roomId - Room ID to verify access to
+ * @returns {Promise<object>} Object with userId, access data, and success status
  */
 export const getRoomAccessForUser = async (userId: any, roomId: any) => {
   try {
@@ -26,7 +38,12 @@ export const getRoomAccessForUser = async (userId: any, roomId: any) => {
 };
 
 /**
- * Obtener todos los accesos de una sala
+ * Get all access permissions for a specific room
+ * 
+ * @async
+ * @param {Request} req - Express request object (id in params)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON array of access permissions or error
  */
 export const getRoomAccessByRoomId = async (req: Request, res: Response) => {
   try {
@@ -43,7 +60,13 @@ export const getRoomAccessByRoomId = async (req: Request, res: Response) => {
 };
 
 /**
- * Crear acceso a sala
+ * Create room access permission
+ * Only admins and room creator can grant access
+ * 
+ * @async
+ * @param {Request} req - Express request object (userId, roomId, grantedBy in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON with created access data or error
  */
 export const createRoomAccess = async (req: Request, res: Response) => {
   try {
@@ -86,7 +109,13 @@ export const createRoomAccess = async (req: Request, res: Response) => {
 };
 
 /**
- * Eliminar acceso
+ * Delete room access permission
+ * Only admins and room creator can revoke access
+ * 
+ * @async
+ * @param {Request} req - Express request object (userId, roomId, grantedBy in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON success message or error
  */
 
 export const deleteRoomAccess = async (req: Request, res: Response) => {

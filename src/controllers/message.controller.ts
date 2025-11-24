@@ -1,6 +1,15 @@
+// src/controllers/message.controller.ts
 import { Request, Response } from "express";
 import { db } from "../config/db";
 
+/**
+ * Controller to get all messages from a specific room ordered by creation date
+ * 
+ * @async
+ * @param {Request} req - Express request object (roomId in params)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON array of messages or error message
+ */
 export const getAllMessagesByRoom = async (req: Request, res: Response) => {
   try {
     const { roomId } = req.params;
@@ -24,6 +33,14 @@ export const getAllMessagesByRoom = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Controller to get all messages from a specific user in a room
+ * 
+ * @async
+ * @param {Request} req - Express request object (userId and roomId in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON array of user's messages or error
+ */
 export const getAllMessageOfUserInRoom = async (req: Request, res: Response) => {
   try {
     const { userId, roomId } = req.body;
@@ -50,10 +67,26 @@ export const getAllMessageOfUserInRoom = async (req: Request, res: Response) => 
   }
 };
 
+/**
+ * Helper function to check if a message should be sent to a specific user
+ * Used for private message routing
+ * 
+ * @param {any[]} target - Array of target user objects
+ * @param {string} userId - User ID to check
+ * @returns {boolean} True if user is in target list
+ */
 export const sendMessageTo = (target: any[], userId: string): boolean => {
   return target.some(t => t.userId === userId);
 };
 
+/**
+ * Controller to create a new message in a room
+ * Supports public, private, and group visibility modes
+ * 
+ * @async
+ * @param {any} data - Message data object (userId, roomId, content, visibility, target)
+ * @returns {Promise<object>} Object with success status and message data
+ */
 export const createMessage = async (data: any) => {
 
   const { userId, roomId, content, visibility, target } = data;
@@ -81,6 +114,14 @@ export const createMessage = async (data: any) => {
   }
 };
 
+/**
+ * Controller to update the content of an existing message
+ * 
+ * @async
+ * @param {Request} req - Express request object (id in params, content and roomId in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON with updated message or error
+ */
 export const updateContentMessage = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -111,6 +152,15 @@ export const updateContentMessage = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Controller to delete a message from a room
+ * Performs hard delete (complete removal from Firestore)
+ * 
+ * @async
+ * @param {Request} req - Express request object (id in params, roomId in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON success message or error
+ */
 export const deleteMessage = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
