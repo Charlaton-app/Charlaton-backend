@@ -6,8 +6,13 @@ import {
   resetPass,
   loginOAuth,
   refreshToken,
+  signup,
 } from "../controllers/auth.controller";
-import { loginValidation, validate } from "../validators/auth.validator";
+import {
+  loginValidation,
+  validate,
+  signupValidation,
+} from "../validators/auth.validator";
 import verifyToken from "../middlewares/authentication";
 
 const router = Router();
@@ -27,6 +32,24 @@ const router = Router();
  */
 router.post("/login", loginValidation, validate, login);
 router.post("/login/OAuth", loginValidation, validate, loginOAuth);
+
+/**
+ * @route POST /auth/signup
+ * @desc Creates a new user account
+ * @access Public
+ * @middleware signupValidation - Validates email format, password strength, and required fields
+ * @middleware validate - Executes validations and returns errors if any exist
+ * @body {string} email - User's email address
+ * @body {string} password - User's password (min 6 characters)
+ * @body {string} [nickname] - User's display name (optional)
+ * @body {string} [birth_date] - User's birth date (optional)
+ * @body {number} [rolId] - User's role ID (default: 2 for regular user)
+ * @body {string} [id] - Firebase UID if user was created in Firebase first (optional)
+ * @returns {object} 201 - User created successfully with cookies set
+ * @returns {object} 400 - Validation error or email already registered
+ * @returns {object} 500 - Server error
+ */
+router.post("/signup", signupValidation, validate, signup);
 
 /**
  * @route POST /auth/refresh

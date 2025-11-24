@@ -3,49 +3,44 @@ import { Request, Response, NextFunction } from "express";
 
 /**
  * Array de validaciones para el registro de usuario (signup).
- * Valida nickname, email, password y confirmPassword según reglas específicas.
+ * Valida email, password y opcionalmente nickname según reglas específicas.
  *
  * @type {Array<ValidationChain>}
  * @constant
  *
- * Reglas de validación:
- * - nickname: requerido, mínimo 2 caracteres
- * - email: requerido, formato email válido, normalizado
- * - password: mínimo 8 caracteres, debe contener mayúscula, minúscula, número y carácter especial
- * - confirmPassword: debe coincidir con password
+ * Validation rules:
+ * - email: required, valid email format, normalized
+ * - password: minimum 6 characters (compatible with Firebase)
+ * - nickname: optional, minimum 2 characters if provided
+ * - confirmPassword: must match password if provided
  */
 export const signupValidation = [
-  body("nickname")
-    .trim()
-    .notEmpty()
-    .withMessage("El nombre es requerido")
-    .isLength({ min: 2 })
-    .withMessage("El nombre debe tener al menos 2 caracteres"),
-
   body("email")
     .trim()
     .notEmpty()
-    .withMessage("El correo electrónico es requerido")
+    .withMessage("Email is required")
     .isEmail()
-    .withMessage("Debe proporcionar un correo electrónico válido")
+    .withMessage("Must provide a valid email address")
     .normalizeEmail(),
 
   body("password")
-    .isLength({ min: 8 })
-    .withMessage("La contraseña debe tener al menos 8 caracteres")
-    .matches(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#.])[A-Za-z\d@$!%*?&#.]{8,}$/
-    )
-    .withMessage(
-      "La contraseña debe contener al menos una mayúscula y un carácter especial"
-    ),
+    .isLength({ min: 6 })
+    .withMessage("Password must be at least 6 characters long"),
 
-  body("confirmPassword").custom((value, { req }) => {
-    if (value !== req.body.password) {
-      throw new Error("Las contraseñas no coinciden");
-    }
-    return true;
-  }),
+  body("nickname")
+    .optional()
+    .trim()
+    .isLength({ min: 2 })
+    .withMessage("Nickname must be at least 2 characters if provided"),
+
+  body("confirmPassword")
+    .optional()
+    .custom((value, { req }) => {
+      if (value && value !== req.body.password) {
+        throw new Error("Passwords do not match");
+      }
+      return true;
+    }),
 ];
 
 /**
