@@ -4,8 +4,8 @@ import {
   getAllMessagesByRoom,
   createMessage,
   updateContentMessage,
-  deleteMessage
-} from "../controllers/message.controllers";
+  deleteMessage,
+} from "../controllers/message.controller";
 import verifyToken from "../middlewares/authentication";
 
 const router = Router();
