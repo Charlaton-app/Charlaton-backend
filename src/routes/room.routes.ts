@@ -5,7 +5,9 @@ import {
   createRoom,
   updateRoom,
   deleteRoom,
-  changePassword
+  changePassword,
+  addAdmin,
+  removeAdmin
 } from "../controllers/room.controller";
 import verifyToken from "../middlewares/authentication";
 
@@ -17,5 +19,7 @@ router.post("/", verifyToken, createRoom);
 router.put("/password/:id", verifyToken, changePassword);
 router.put("/:id", verifyToken, updateRoom);
 router.delete("/:id", verifyToken, deleteRoom);
+router.post("/admin/:id",verifyToken, addAdmin);
+router.delete("/admin/:id",verifyToken, removeAdmin);
 
 export default router;

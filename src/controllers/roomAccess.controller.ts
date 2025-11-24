@@ -49,6 +49,21 @@ export const createRoomAccess = async (req: Request, res: Response) => {
   try {
     const { userId, roomId, grantedBy } = req.body;
 
+    const roomRef = ROOMS.doc(roomId);
+    const roomDoc = await roomRef.get();
+
+    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null) {
+      return res.status(404).json({ error: "Sala no encontrada" });
+    }
+
+    const roomData = roomDoc.data();
+    const creatorId = roomData?.creatorId;
+    const adminsId = roomData?.adminsId;
+
+    if (!adminsId.includes(grantedBy) && grantedBy !== creatorId) {
+      return res.status(403).json({ error: "Solo los admins pueden dar acceso" });
+    }
+
     const accessRef = ROOMS.doc(String(roomId))
       .collection("access")
       .doc();
@@ -73,9 +88,25 @@ export const createRoomAccess = async (req: Request, res: Response) => {
 /**
  * Eliminar acceso
  */
+
 export const deleteRoomAccess = async (req: Request, res: Response) => {
   try {
-    const { userId, roomId } = req.body;
+    const { userId, roomId, grantedBy } = req.body;
+
+    const roomRef = ROOMS.doc(roomId);
+    const roomDoc = await roomRef.get();
+
+    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null) {
+      return res.status(404).json({ error: "Sala no encontrada" });
+    }
+
+    const roomData = roomDoc.data();
+    const creatorId = roomData?.creatorId;
+    const adminsId = roomData?.adminsId;
+
+    if (!adminsId.includes(grantedBy) && grantedBy !== creatorId) {
+      return res.status(403).json({ error: "Solo los admins eliminar un acceso" });
+    }
 
     const snap = await ROOMS.doc(String(roomId))
       .collection("access")

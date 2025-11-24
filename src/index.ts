@@ -15,6 +15,8 @@ import { createConnection } from "./controllers/userConnection.controller";
 import { getRoomAccessForUser } from "./controllers/roomAccess.controller";
 import { leftConnection } from "./controllers/userConnection.controller";
 import { createMessage, sendMessageTo } from "./controllers/message.controllers";
+import { existsAdmin, getAdminsInRoom } from "./functions/room.functions";
+import { createRoomAccess } from "./functions/roomAccess.functions";
 
 
 const app = express();
@@ -88,6 +90,68 @@ io.on("connection", async (socket) => {
 
     socket.to(roomId).emit("disconnect",{user:user, message: "usuario desconectado", success: true});
 
+  });
+
+  socket.on("send_access", async (roomId) => {
+
+    const userId = socket.data.userId;
+
+    const adminsId = await getAdminsInRoom(roomId);
+
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if (!room) return;
+
+    for (const socketId of room) {
+      const clientSocket = io.sockets.sockets.get(socketId);
+      if (!clientSocket) continue;
+  
+      if (adminsId.includes(clientSocket.data.userId)) {
+        clientSocket.emit("send_access", {
+          userId,
+          roomId,
+          message: "El usuario solicita acceso"
+        });
+      }
+    }
+  
+  socket.on("grant_access", async ({ roomId, targetUserId }) => {
+
+    const admin = socket.data.user;
+    const adminId = admin.id;
+    
+    const isAdmin = await existsAdmin(roomId, adminId);
+    const roomSnap = await db.collection("rooms").doc(roomId).get();
+    const creatorId = roomSnap.data()?.creatorId;
+    
+    if (!isAdmin && adminId !== creatorId) {
+      return socket.emit("grant_access_error", {
+        success: false,
+        message: "No eres admin ni creador"
+      });
+    }
+    
+    await createRoomAccess(targetUserId,roomId,adminId); 
+    
+    const room = io.sockets.adapter.rooms.get(roomId);
+    if(!room) return;
+    
+    for (const socketId of room) {
+      const clientSocket = io.sockets.sockets.get(socketId);
+      if (!clientSocket) continue;
+    
+      if (clientSocket.data.userId === targetUserId) {
+        clientSocket.emit("access_granted", { // este es el evento que recibe el usuario
+          roomId,
+          message: "Tu acceso fue aceptado"
+        });
+      }
+    }
+    
+    socket.emit("grant_access_success", {
+      success: true,
+      message: "Acceso creado"
+    });
+  });
   });
 
 
