@@ -233,6 +233,90 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 };
 
+/*
+Elimina un admin al grupo de los admins
+*/
+
+export const removeAdmin = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;         // id de la room
+    const { adminToRemove, userId } = req.body; 
+    // userId = el que está haciendo la petición
+
+    const roomRef = ROOMS.doc(id);
+    const roomDoc = await roomRef.get();
+
+    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null) {
+      return res.status(404).json({ error: "Sala no encontrada" });
+    }
+
+    const roomData = roomDoc.data();
+    const admins = roomData?.adminId || [];
+    const creatorId = roomData?.creatorId;
+
+    // 1. Validar que SOLO el creador pueda eliminar
+    if (userId !== creatorId) {
+      return res.status(403).json({ error: "Solo el creador puede eliminar admins" });
+    }
+
+    // 2. Evitar que el creador se elimine a sí mismo
+    if (adminToRemove === creatorId) {
+      return res.status(400).json({ error: "El creador no puede eliminarse a sí mismo" });
+    }
+
+    // 3. Convertir a Set y eliminar
+    const adminSet = new Set<string>(admins);
+    adminSet.delete(adminToRemove);
+
+    await roomRef.update({
+      adminId: [...adminSet]
+    });
+
+    return res.json({
+      success: true,
+      adminId: [...adminSet]
+    });
+
+  } catch (error) {
+    console.error("Error eliminando admin:", error);
+    return res.status(500).json({ error: "Error al eliminar admin" });
+  }
+};
+
+
+/*
+Añade un nuevo admin al grupo de los admins
+*/
+
+export const addAdmin = async (req: Request, res: Response) => {
+
+  try{
+
+    const { id } = req.params;
+    const { newAdmin } = req.body;
+
+    const roomDoc = await ROOMS.doc(id).get();
+    if (!roomDoc.exists || roomDoc.data()?.deletedAt !== null)
+      return res.status(404).json({ error: "Sala no encontrada" });
+
+    const actualAdmins = roomDoc.data()?.adminId;
+
+    const setActualAdmins = new Set<string>(actualAdmins);
+
+    setActualAdmins.add(newAdmin);
+
+    await ROOMS.doc(id).update({
+      adminsId: [...setActualAdmins]
+    });
+
+    res.json({ id, ...roomDoc.data()});
+
+  } catch (error){
+    console.error("Error actualizando admins:", error);
+    res.status(500).json({ error: "Error al actualizar admins" });
+  }
+};
+
 /**
  * Controller to remove an admin from the admin group
  * Only the room creator can remove admins

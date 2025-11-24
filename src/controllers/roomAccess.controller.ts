@@ -117,6 +117,7 @@ export const createRoomAccess = async (req: Request, res: Response) => {
  * @param {Response} res - Express response object
  * @returns {Promise<Response>} JSON success message or error
  */
+
 export const deleteRoomAccess = async (req: Request, res: Response) => {
   try {
     const { userId, roomId, grantedBy } = req.body;
