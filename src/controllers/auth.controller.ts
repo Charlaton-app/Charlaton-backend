@@ -757,7 +757,7 @@ export const resetPass = async (req: Request, res: Response) => {
 export const signup = async (req: Request, res: Response) => {
   try {
     console.log("[AUTH] Signup request received");
-    const { id, email, nickname, password, birth_date, rolId } = req.body;
+    const { id, email, nickname, password, rolId } = req.body;
 
     // Validate required fields
     if (!email || !password) {
@@ -787,7 +787,6 @@ export const signup = async (req: Request, res: Response) => {
       email,
       nickname: nickname || null,
       password: hashedPassword,
-      birth_date: birth_date || null,
       rolId: rolId || 2, // Default role: regular user
       createdAt: admin.firestore.Timestamp.fromDate(new Date()),
       updatedAt: admin.firestore.Timestamp.fromDate(new Date()),

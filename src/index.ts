@@ -14,7 +14,7 @@ import { db } from "./config/db";
 import { createConnection } from "./controllers/userConnection.controller";
 import { getRoomAccessForUser } from "./controllers/roomAccess.controller";
 import { leftConnection } from "./controllers/userConnection.controller";
-import { createMessage, sendMessageTo } from "./controllers/message.controllers";
+import { createMessage, sendMessageTo } from "./controllers/message.controller";
 import { existsAdmin, getAdminsInRoom } from "./functions/room.functions";
 import { createRoomAccess } from "./functions/roomAccess.functions";
 
