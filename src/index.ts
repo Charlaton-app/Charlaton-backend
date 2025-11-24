@@ -7,7 +7,7 @@ import roomAccessRoutes from "./routes/roomAccess.routes";
 import userConnectionRoutes from "./routes/userConnection.routes";
 import messageRoutes from "./routes/message.routes";
 import authRoutes from "./routes/auth.routes";
-import { Server, Socket } from "socket.io";
+import { Server } from "socket.io";
 import http from "http";
 import jwt from "jsonwebtoken";
 import { db } from "./config/db";
@@ -267,7 +267,7 @@ app.use((req,res) => {
     res.status(404).json({error: "Route not found"});
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
 

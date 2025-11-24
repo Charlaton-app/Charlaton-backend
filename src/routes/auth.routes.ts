@@ -19,16 +19,16 @@ const router = Router();
 
 /**
  * @route POST /auth/login
- * @desc Inicia sesión de usuario
- * @access Público
- * @middleware loginValidation - Valida formato de email y que password esté presente
- * @middleware validate - Ejecuta las validaciones y retorna errores si existen
- * @body {string} email - Email del usuario
- * @body {string} password - Contraseña del usuario
- * @returns {object} 200 - Usuario autenticado exitosamente con cookies establecidas
- * @returns {object} 400 - Error de validación
- * @returns {object} 401 - Credenciales inválidas
- * @returns {object} 500 - Error del servidor
+ * @desc User login
+ * @access Public
+ * @middleware loginValidation - Validates email format and password presence
+ * @middleware validate - Executes validations and returns errors if any exist
+ * @body {string} email - User's email
+ * @body {string} password - User's password
+ * @returns {object} 200 - User authenticated successfully with cookies set
+ * @returns {object} 400 - Validation error
+ * @returns {object} 401 - Invalid credentials
+ * @returns {object} 500 - Server error
  */
 router.post("/login", loginValidation, validate, login);
 router.post("/login/OAuth", loginValidation, validate, loginOAuth);
@@ -53,48 +53,48 @@ router.post("/signup", signupValidation, validate, signup);
 
 /**
  * @route POST /auth/refresh
- * @desc Refresca el access token usando el refresh token de las cookies
- * @access Público (requiere RefreshToken cookie válido)
- * @returns {object} 200 - Token refrescado exitosamente, nueva cookie AccessToken establecida
- * @returns {object} 401 - Refresh token no proporcionado
- * @returns {object} 403 - Refresh token inválido o sesión revocada
- * @returns {object} 500 - Error del servidor
+ * @desc Refreshes access token using refresh token from cookies
+ * @access Public (requires valid RefreshToken cookie)
+ * @returns {object} 200 - Token refreshed successfully, new AccessToken cookie set
+ * @returns {object} 401 - Refresh token not provided
+ * @returns {object} 403 - Invalid refresh token or revoked session
+ * @returns {object} 500 - Server error
  */
 router.post("/refresh", refreshToken);
 
 /**
  * @route POST /auth/logout
- * @desc Cierra la sesión del usuario marcando la sesión como revocada
- * @access Protegido
- * @middleware verifyToken - Verifica que el usuario esté autenticado
- * @returns {object} 200 - Sesión cerrada exitosamente, cookies eliminadas
- * @returns {object} 401 - No autenticado
- * @returns {object} 500 - Error del servidor
+ * @desc Logs out user by marking session as revoked
+ * @access Protected
+ * @middleware verifyToken - Verifies user is authenticated
+ * @returns {object} 200 - Session closed successfully, cookies cleared
+ * @returns {object} 401 - Not authenticated
+ * @returns {object} 500 - Server error
  */
 router.post("/logout", verifyToken, logout);
 
 /**
  * @route POST /auth/recover
- * @desc Solicita recuperación de contraseña enviando email con token de restablecimiento
- * @access Público
- * @body {string} email - Email del usuario que solicita recuperar contraseña
- * @returns {object} 200 - Email enviado si el usuario existe
- * @returns {object} 202 - Respuesta genérica para no filtrar emails (aunque el email no exista)
- * @returns {object} 400 - Email no proporcionado
- * @returns {object} 500 - Error del servidor
+ * @desc Requests password recovery by sending email with reset token
+ * @access Public
+ * @body {string} email - Email of user requesting password reset
+ * @returns {object} 200 - Email sent if user exists
+ * @returns {object} 202 - Generic response to avoid email disclosure (even if email doesn't exist)
+ * @returns {object} 400 - Email not provided
+ * @returns {object} 500 - Server error
  */
 router.post("/recover", recoverPass);
 
 /**
  * @route POST /auth/reset/:token
- * @desc Restablece la contraseña usando el token recibido por email
- * @access Público
- * @param {string} token - Token de restablecimiento recibido por email
- * @body {string} password - Nueva contraseña
- * @body {string} confirmPassword - Confirmación de la nueva contraseña
- * @returns {object} 200 - Contraseña actualizada exitosamente
- * @returns {object} 400 - Token inválido/expirado, contraseñas no coinciden, o formato de contraseña inválido
- * @returns {object} 500 - Error del servidor
+ * @desc Resets password using token received by email
+ * @access Public
+ * @param {string} token - Reset token received by email
+ * @body {string} password - New password
+ * @body {string} confirmPassword - New password confirmation
+ * @returns {object} 200 - Password updated successfully
+ * @returns {object} 400 - Invalid/expired token, passwords don't match, or invalid password format
+ * @returns {object} 500 - Server error
  */
 router.post("/reset/:token", resetPass);
 
