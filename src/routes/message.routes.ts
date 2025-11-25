@@ -1,7 +1,7 @@
 /**
  * Message Routes
  * API endpoints for managing messages in rooms
- * 
+ *
  * @module routes/message
  */
 

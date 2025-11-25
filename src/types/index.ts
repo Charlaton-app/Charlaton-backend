@@ -23,4 +23,3 @@ export interface UserResponse {
   createdAt: Date;
   updatedAt?: Date;
 }
-  

@@ -1,15 +1,15 @@
 /**
  * Room Access Routes
  * API endpoints for managing room access permissions
- * 
+ *
  * @module routes/roomAccess
  */
 
 import {
-    getRoomAccessForUser,
-    getRoomAccessByRoomId,
-    createRoomAccess,
-    deleteRoomAccess
+  getRoomAccessForUser,
+  getRoomAccessByRoomId,
+  createRoomAccess,
+  deleteRoomAccess,
 } from "../controllers/roomAccess.controller";
 import { Router } from "express";
 import verifyToken from "../middlewares/authentication";
@@ -28,7 +28,7 @@ const router = Router();
  * @returns {object} 404 - Access not found
  * @returns {object} 500 - Server error
  */
-router.get("/verify/user",verifyToken, getRoomAccessForUser);
+router.get("/verify/user", verifyToken, getRoomAccessForUser);
 
 /**
  * @route GET /access/per-room/:id
@@ -40,7 +40,7 @@ router.get("/verify/user",verifyToken, getRoomAccessForUser);
  * @returns {object} 401 - Not authenticated
  * @returns {object} 500 - Server error
  */
-router.get("/per-room/:id",verifyToken, getRoomAccessByRoomId);
+router.get("/per-room/:id", verifyToken, getRoomAccessByRoomId);
 
 /**
  * @route POST /access
@@ -56,7 +56,7 @@ router.get("/per-room/:id",verifyToken, getRoomAccessByRoomId);
  * @returns {object} 404 - Room not found
  * @returns {object} 500 - Server error
  */
-router.post("/",verifyToken, createRoomAccess);
+router.post("/", verifyToken, createRoomAccess);
 
 /**
  * @route DELETE /access
@@ -75,4 +75,3 @@ router.post("/",verifyToken, createRoomAccess);
 router.delete("/", verifyToken, deleteRoomAccess);
 
 export default router;
-

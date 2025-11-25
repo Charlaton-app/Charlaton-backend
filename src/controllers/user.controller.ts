@@ -55,7 +55,9 @@ export const getAllUsers = async (req: Request, res: Response) => {
 
     const snap = await db.collection("users").get();
     const usersData = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const users = await Promise.all(usersData.map(user => excludePassword(user)));
+    const users = await Promise.all(
+      usersData.map((user) => excludePassword(user))
+    );
 
     res.json(users);
   } catch (error) {
@@ -82,7 +84,7 @@ export const getUserById = async (req: Request, res: Response) => {
 
     const userData = { id: doc.id, ...doc.data() };
     const userResponse = await excludePassword(userData);
-    
+
     res.json(userResponse);
   } catch (error) {
     res.status(500).json({ error: "Error al obtener usuario" });
@@ -104,7 +106,9 @@ export const createUser = async (req: Request, res: Response) => {
     const { email, nickname, password, edad, rolId } = req.body;
 
     if (!email || !password || !edad) {
-      return res.status(400).json({ error: "Email, password y edad son requeridos" });
+      return res
+        .status(400)
+        .json({ error: "Email, password y edad son requeridos" });
     }
 
     // Validar si el correo ya existe
@@ -117,8 +121,13 @@ export const createUser = async (req: Request, res: Response) => {
     const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 
     // Convert edad to number if it's a string
-    const edadNumber = typeof edad === 'string' ? parseInt(edad, 10) : Number(edad);
-    const rolIdNumber = rolId ? (typeof rolId === 'string' ? parseInt(rolId, 10) : Number(rolId)) : 2;
+    const edadNumber =
+      typeof edad === "string" ? parseInt(edad, 10) : Number(edad);
+    const rolIdNumber = rolId
+      ? typeof rolId === "string"
+        ? parseInt(rolId, 10)
+        : Number(rolId)
+      : 2;
 
     const userData = {
       email,
@@ -198,7 +207,8 @@ export const updateUser = async (req: Request, res: Response) => {
     if (nickname) updateData.nickname = nickname;
     if (edad !== undefined) {
       // Convert edad to number if it's a string
-      updateData.edad = typeof edad === 'string' ? parseInt(edad, 10) : Number(edad);
+      updateData.edad =
+        typeof edad === "string" ? parseInt(edad, 10) : Number(edad);
     }
 
     updateData.updatedAt = admin.firestore.Timestamp.fromDate(new Date());

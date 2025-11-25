@@ -1,7 +1,7 @@
 /**
  * Firebase Admin SDK configuration module
  * Initializes Firebase Admin and exports Firestore database instance
- * 
+ *
  * @module config/db
  * @requires firebase-admin
  * @requires dotenv
@@ -33,16 +33,16 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   const firebaseKeyPath = path.isAbsolute(process.env.FIREBASE_KEY_PATH)
     ? process.env.FIREBASE_KEY_PATH
     : path.resolve(process.cwd(), process.env.FIREBASE_KEY_PATH);
-  
+
   // Verify that the file exists
   if (!fs.existsSync(firebaseKeyPath)) {
     throw new Error(
       `Firebase key file not found at: ${firebaseKeyPath}\n` +
-      `Current working directory: ${process.cwd()}\n` +
-      `Make sure FIREBASE_KEY_PATH in .env points to the correct location.`
+        `Current working directory: ${process.cwd()}\n` +
+        `Make sure FIREBASE_KEY_PATH in .env points to the correct location.`
     );
   }
-  
+
   serviceAccount = require(firebaseKeyPath);
 } else {
   throw new Error(
@@ -54,7 +54,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
  * Initialize Firebase Admin SDK with service account credentials
  */
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
 
 /**

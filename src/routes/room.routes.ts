@@ -7,7 +7,7 @@ import {
   deleteRoom,
   changePassword,
   addAdmin,
-  removeAdmin
+  removeAdmin,
 } from "../controllers/room.controller";
 import verifyToken from "../middlewares/authentication";
 
@@ -96,7 +96,7 @@ router.put("/:id", verifyToken, updateRoom);
  * @returns {object} 500 - Server error
  */
 router.delete("/:id", verifyToken, deleteRoom);
-router.post("/admin/:id",verifyToken, addAdmin);
-router.delete("/admin/:id",verifyToken, removeAdmin);
+router.post("/admin/:id", verifyToken, addAdmin);
+router.delete("/admin/:id", verifyToken, removeAdmin);
 
 export default router;

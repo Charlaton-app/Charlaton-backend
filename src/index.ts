@@ -69,23 +69,19 @@ io.on("connection", async (socket) => {
     const connectionSnap = await createConnectionAux(userId, roomId);
 
     if (!connectionSnap.success) {
-      socket
-        .to(roomId)
-        .emit("join_room_error", {
-          user: user,
-          message: "error al crear conexión",
-          success: false,
-        });
+      socket.to(roomId).emit("join_room_error", {
+        user: user,
+        message: "error al crear conexión",
+        success: false,
+      });
       return;
     }
 
-    socket
-      .to(roomId)
-      .emit("join_room_success", {
-        user: user,
-        message: "acceso exitoso",
-        success: true,
-      });
+    socket.to(roomId).emit("join_room_success", {
+      user: user,
+      message: "acceso exitoso",
+      success: true,
+    });
   });
 
   socket.on("disconnect", async () => {
@@ -95,13 +91,11 @@ io.on("connection", async (socket) => {
 
     await leftConnectionAux(userId, roomId);
 
-    socket
-      .to(roomId)
-      .emit("disconnect", {
-        user: user,
-        message: "usuario desconectado",
-        success: true,
-      });
+    socket.to(roomId).emit("disconnect", {
+      user: user,
+      message: "usuario desconectado",
+      success: true,
+    });
   });
 
   socket.on("send_access", async (roomId) => {
@@ -203,13 +197,11 @@ io.on("connection", async (socket) => {
     }
 
     if (visibility === "public") {
-      socket
-        .to(roomId)
-        .emit("message_success", {
-          content: msg,
-          success: true,
-          visibility: "public",
-        });
+      socket.to(roomId).emit("message_success", {
+        content: msg,
+        success: true,
+        visibility: "public",
+      });
     }
 
     if (visibility === "private") {

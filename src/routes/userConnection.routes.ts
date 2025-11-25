@@ -1,7 +1,7 @@
 /**
  * User Connection Routes
  * API endpoints for managing user connections/sessions in rooms
- * 
+ *
  * @module routes/userConnection
  */
 

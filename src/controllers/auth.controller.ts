@@ -153,7 +153,10 @@ export const refreshToken = async (req: Request, res: Response) => {
     // Verificar el refresh token primero - el token JWT ya contiene el userId
     let decoded: any;
     try {
-      decoded = jwt.verify(tokenFromCookie, process.env.REFRESH_SECRET as string);
+      decoded = jwt.verify(
+        tokenFromCookie,
+        process.env.REFRESH_SECRET as string
+      );
     } catch (jwtError: any) {
       console.log("[AUTH] Invalid refresh token:", jwtError.message);
       return res.status(403).json({ error: "Invalid refresh token" });
@@ -167,16 +170,11 @@ export const refreshToken = async (req: Request, res: Response) => {
     }
 
     // Obtener user directamente usando el userId del token
-    const userDoc = await db
-      .collection("users")
-      .doc(String(userId))
-      .get();
-    
+    const userDoc = await db.collection("users").doc(String(userId)).get();
+
     if (!userDoc.exists) {
       console.log("[AUTH] User not found:", userId);
-      return res
-        .status(403)
-        .json({ error: "User not found" });
+      return res.status(403).json({ error: "User not found" });
     }
 
     const user = { id: userDoc.id, ...(userDoc.data() as any) };
@@ -196,7 +194,9 @@ export const refreshToken = async (req: Request, res: Response) => {
     } catch (sessionError) {
       // Si no se puede verificar la sesión, continuar de todas formas
       // El token JWT ya está validado
-      console.log("[AUTH] Could not verify session, but token is valid, continuing...");
+      console.log(
+        "[AUTH] Could not verify session, but token is valid, continuing..."
+      );
     }
 
     // generateAccessToken now accepts both string and number
@@ -213,9 +213,9 @@ export const refreshToken = async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("[AUTH] Error en refreshToken:", err);
     console.error("[AUTH] Error stack:", err.stack);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: "Error refreshing token",
-      details: process.env.NODE_ENV === "development" ? err.message : undefined
+      details: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
 };
@@ -794,7 +794,9 @@ export const signup = async (req: Request, res: Response) => {
     // Validate required fields
     if (!email || !password || !edad) {
       console.log("[AUTH] Signup failed: Missing required fields");
-      return res.status(400).json({ error: "Email, password and edad are required" });
+      return res
+        .status(400)
+        .json({ error: "Email, password and edad are required" });
     }
 
     console.log(`[AUTH] Checking if email ${email} already exists`);
@@ -815,8 +817,13 @@ export const signup = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
     // Convert edad to number if it's a string
-    const edadNumber = typeof edad === 'string' ? parseInt(edad, 10) : Number(edad);
-    const rolIdNumber = rolId ? (typeof rolId === 'string' ? parseInt(rolId, 10) : Number(rolId)) : 2;
+    const edadNumber =
+      typeof edad === "string" ? parseInt(edad, 10) : Number(edad);
+    const rolIdNumber = rolId
+      ? typeof rolId === "string"
+        ? parseInt(rolId, 10)
+        : Number(rolId)
+      : 2;
 
     // Prepare user data
     const userData: any = {

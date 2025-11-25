@@ -1,7 +1,7 @@
 /**
  * Room Access Controller
  * Handles user access permissions for rooms
- * 
+ *
  * @module controllers/roomAccess
  */
 
@@ -12,7 +12,7 @@ const ROOMS = db.collection("rooms");
 
 /**
  * Get room access for a specific user
- * 
+ *
  * @async
  * @param {any} userId - User ID to check access
  * @param {any} roomId - Room ID to verify access to
@@ -20,26 +20,24 @@ const ROOMS = db.collection("rooms");
  */
 export const getRoomAccessForUser = async (userId: any, roomId: any) => {
   try {
-
     const accessSnap = await ROOMS.doc(String(roomId))
       .collection("access")
       .where("userId", "==", Number(userId))
       .get();
 
-    if (accessSnap.empty)
-      return {userId: userId, success: false};
+    if (accessSnap.empty) return { userId: userId, success: false };
 
     const access = accessSnap.docs.map((d) => ({ id: d.id, ...d.data() }))[0];
 
-    return {userId: userId,access: access, success: true};
+    return { userId: userId, access: access, success: true };
   } catch (error) {
-    return {userId: userId, success: false};
+    return { userId: userId, success: false };
   }
 };
 
 /**
  * Get all access permissions for a specific room
- * 
+ *
  * @async
  * @param {Request} req - Express request object (id in params)
  * @param {Response} res - Express response object
@@ -62,7 +60,7 @@ export const getRoomAccessByRoomId = async (req: Request, res: Response) => {
 /**
  * Create room access permission
  * Only admins and room creator can grant access
- * 
+ *
  * @async
  * @param {Request} req - Express request object (userId, roomId, grantedBy in body)
  * @param {Response} res - Express response object
@@ -84,12 +82,12 @@ export const createRoomAccess = async (req: Request, res: Response) => {
     const adminsId = roomData?.adminsId;
 
     if (!adminsId.includes(grantedBy) && grantedBy !== creatorId) {
-      return res.status(403).json({ error: "Solo los admins pueden dar acceso" });
+      return res
+        .status(403)
+        .json({ error: "Solo los admins pueden dar acceso" });
     }
 
-    const accessRef = ROOMS.doc(String(roomId))
-      .collection("access")
-      .doc();
+    const accessRef = ROOMS.doc(String(roomId)).collection("access").doc();
 
     const accessData = {
       userId: Number(userId),
@@ -111,7 +109,7 @@ export const createRoomAccess = async (req: Request, res: Response) => {
 /**
  * Delete room access permission
  * Only admins and room creator can revoke access
- * 
+ *
  * @async
  * @param {Request} req - Express request object (userId, roomId, grantedBy in body)
  * @param {Response} res - Express response object
@@ -134,7 +132,9 @@ export const deleteRoomAccess = async (req: Request, res: Response) => {
     const adminsId = roomData?.adminsId;
 
     if (!adminsId.includes(grantedBy) && grantedBy !== creatorId) {
-      return res.status(403).json({ error: "Solo los admins eliminar un acceso" });
+      return res
+        .status(403)
+        .json({ error: "Solo los admins eliminar un acceso" });
     }
 
     const snap = await ROOMS.doc(String(roomId))

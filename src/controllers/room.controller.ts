@@ -2,7 +2,7 @@
  * Room Controller
  * Manages meeting rooms including creation, updates, and deletion
  * Handles room admin permissions and sub-rooms
- * 
+ *
  * @module controllers/room
  */
 
@@ -163,13 +163,14 @@ export const getRoomById = async (req: Request, res: Response) => {
  * Checks for collisions and retries if needed
  */
 const generateSimpleRoomId = async (): Promise<string> => {
-  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  const letters = "abcdefghijklmnopqrstuvwxyz";
   const getRandomLetters = (count: number) => {
-    return Array.from({ length: count }, () => 
-      letters[Math.floor(Math.random() * letters.length)]
-    ).join('');
+    return Array.from(
+      { length: count },
+      () => letters[Math.floor(Math.random() * letters.length)]
+    ).join("");
   };
-  
+
   // Try up to 10 times to find a unique ID
   for (let i = 0; i < 10; i++) {
     const roomId = `${getRandomLetters(3)}-${getRandomLetters(3)}`;
@@ -178,9 +179,11 @@ const generateSimpleRoomId = async (): Promise<string> => {
       return roomId;
     }
   }
-  
+
   // Fallback: if all attempts fail, use a longer ID with timestamp
-  return `${getRandomLetters(3)}-${getRandomLetters(3)}-${Date.now().toString(36).slice(-3)}`;
+  return `${getRandomLetters(3)}-${getRandomLetters(3)}-${Date.now()
+    .toString(36)
+    .slice(-3)}`;
 };
 
 export const createRoom = async (req: Request, res: Response) => {
@@ -198,7 +201,6 @@ export const createRoom = async (req: Request, res: Response) => {
     // Generate simple room ID
     const roomId = await generateSimpleRoomId();
     const newRoomRef = ROOMS.doc(roomId);
-
 
     const setAdminsId = new Set<String>(adminsId); // creates a set from admins (which is a JSON with a list)
     setAdminsId.add(creatorId); // adds creator ID to the set
@@ -265,7 +267,7 @@ export const changePassword = async (req: Request, res: Response) => {
  * Controller to remove an admin from the admin group
  * Only the room creator can remove admins
  * Creator cannot remove themselves
- * 
+ *
  * @async
  * @param {Request} req - Express request object (id in params, adminToRemove and userId in body)
  * @param {Response} res - Express response object
@@ -273,8 +275,8 @@ export const changePassword = async (req: Request, res: Response) => {
  */
 export const removeAdmin = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;         // room id
-    const { adminToRemove, userId } = req.body; 
+    const { id } = req.params; // room id
+    const { adminToRemove, userId } = req.body;
     // userId = the one making the request
 
     const roomRef = ROOMS.doc(id);
@@ -290,12 +292,16 @@ export const removeAdmin = async (req: Request, res: Response) => {
 
     // 1. Validate that ONLY creator can remove admins
     if (userId !== creatorId) {
-      return res.status(403).json({ error: "Solo el creador puede eliminar admins" });
+      return res
+        .status(403)
+        .json({ error: "Solo el creador puede eliminar admins" });
     }
 
     // 2. Prevent creator from removing themselves
     if (adminToRemove === creatorId) {
-      return res.status(400).json({ error: "El creador no puede eliminarse a sí mismo" });
+      return res
+        .status(400)
+        .json({ error: "El creador no puede eliminarse a sí mismo" });
     }
 
     // 3. Convert to Set and remove
@@ -303,33 +309,29 @@ export const removeAdmin = async (req: Request, res: Response) => {
     adminSet.delete(adminToRemove);
 
     await roomRef.update({
-      adminId: [...adminSet]
+      adminId: [...adminSet],
     });
 
     return res.json({
       success: true,
-      adminId: [...adminSet]
+      adminId: [...adminSet],
     });
-
   } catch (error) {
     console.error("Error eliminando admin:", error);
     return res.status(500).json({ error: "Error al eliminar admin" });
   }
 };
 
-
 /**
  * Controller to add a new admin to the admin group
- * 
+ *
  * @async
  * @param {Request} req - Express request object (id in params, newAdmin in body)
  * @param {Response} res - Express response object
  * @returns {Promise<Response>} JSON with room id and data or error
  */
 export const addAdmin = async (req: Request, res: Response) => {
-
-  try{
-
+  try {
     const { id } = req.params;
     const { newAdmin } = req.body;
 
@@ -344,12 +346,11 @@ export const addAdmin = async (req: Request, res: Response) => {
     setActualAdmins.add(newAdmin);
 
     await ROOMS.doc(id).update({
-      adminsId: [...setActualAdmins]
+      adminsId: [...setActualAdmins],
     });
 
-    res.json({ id, ...roomDoc.data()});
-
-  } catch (error){
+    res.json({ id, ...roomDoc.data() });
+  } catch (error) {
     console.error("Error actualizando admins:", error);
     res.status(500).json({ error: "Error al actualizar admins" });
   }
