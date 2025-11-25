@@ -219,18 +219,49 @@ io.on("connection", async (socket) => {
 
 });
 
-const explicitOrigin = "https://charlaton-frontend.vercel.app";
-const allowedOrigins = [
-  explicitOrigin,
-  process.env.FRONTEND_URL,
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-  "http://localhost:5173",
-].filter(Boolean) as string[];
+// CORS configuration - uses environment variables only
+// FRONTEND_URL should contain the full URL of your frontend (e.g., https://charlaton-frontend.vercel.app)
+const getAllowedOrigins = (): string[] => {
+  const origins: string[] = [];
+  
+  // Add FRONTEND_URL if provided (should be the complete URL with protocol)
+  if (process.env.FRONTEND_URL) {
+    const frontendUrl = process.env.FRONTEND_URL.trim();
+    // Ensure URL has protocol
+    if (frontendUrl && !frontendUrl.startsWith('http')) {
+      origins.push(`https://${frontendUrl}`);
+    } else if (frontendUrl) {
+      origins.push(frontendUrl);
+    }
+  }
+  
+  // Add localhost for development
+  if (process.env.NODE_ENV !== "production") {
+    origins.push("http://localhost:5173");
+  }
+  
+  return origins;
+};
+
+const allowedOrigins = getAllowedOrigins();
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      if (allowedOrigins.length === 0) {
+        // If no origins configured, allow all in development
+        if (process.env.NODE_ENV !== "production") {
+          return callback(null, true);
+        }
+        return callback(new Error("CORS: No allowed origins configured"));
+      }
+      
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
