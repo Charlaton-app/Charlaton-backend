@@ -29,39 +29,63 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
       ...d.data(),
     }));
 
+    console.log(`[CONNECTIONS] Found ${connections.length} connections for room ${roomId}`);
+
     // Fetch user data for each connection
     const USERS = db.collection("users");
     const connectionsWithUsers = await Promise.all(
       connections.map(async (conn: any) => {
-        if (!conn.userId) return conn;
+        if (!conn.userId) {
+          console.warn(`[CONNECTIONS] Connection ${conn.id} has no userId`);
+          return conn;
+        }
 
         try {
-          const userDoc = await USERS.doc(String(conn.userId)).get();
+          // userId in Firestore is the Firebase Auth UID (string)
+          const userIdStr = String(conn.userId);
+          console.log(`[CONNECTIONS] Fetching user data for userId: ${userIdStr}`);
+          
+          const userDoc = await USERS.doc(userIdStr).get();
+          
           if (userDoc.exists) {
             const userData = userDoc.data();
+            console.log(`[CONNECTIONS] User found:`, {
+              id: userDoc.id,
+              email: userData?.email,
+              nickname: userData?.nickname,
+            });
+            
             return {
               ...conn,
-              userId: String(conn.userId), // Ensure userId is string
+              userId: userIdStr, // Ensure userId is string
               roomId,
               user: {
                 id: userDoc.id,
                 email: userData?.email || null,
                 nickname: userData?.nickname || null,
-                displayName: userData?.nickname || userData?.email?.split('@')[0] || null,
+                displayName: userData?.nickname || userData?.email?.split("@")[0] || null,
               },
             };
+          } else {
+            console.error(`[CONNECTIONS] User ${userIdStr} not found in Firestore`);
           }
         } catch (err) {
-          console.error(`Error fetching user ${conn.userId}:`, err);
+          console.error(`[CONNECTIONS] Error fetching user ${conn.userId}:`, err);
         }
 
-        return conn;
+        // Return connection without user data if fetch failed
+        return {
+          ...conn,
+          userId: String(conn.userId),
+          roomId,
+        };
       })
     );
 
+    console.log(`[CONNECTIONS] Returning ${connectionsWithUsers.length} connections with user data`);
     res.json(connectionsWithUsers);
   } catch (error) {
-    console.error("Error in getConnectionsByRoom:", error);
+    console.error("[CONNECTIONS] Error in getConnectionsByRoom:", error);
     res.status(500).json({ error: "Error al obtener conexiones" });
   }
 };
