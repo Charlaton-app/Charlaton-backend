@@ -27,9 +27,11 @@ const io = new Server(server,  { cors: { origin: "*" } }); // para pruebas con e
 // configuración del servidor websocket
 
 io.use((socket, next) => {
-  const { token } = socket.handshake.auth;
+  const { token } = socket.handshake.auth || {};
+  if (!token) return next(new Error("Token ausente"));
   try {
-    const decoded = jwt.verify(token, process.env.ACCESS_SECRET as string);
+    const decoded = jwt.verify(token, process.env.ACCESS_SECRET as string) as { id?: string };
+    if (!decoded || !decoded.id) return next(new Error("Token inválido"));
     socket.data.user = decoded;
     next();
   } catch (err) {
@@ -38,61 +40,94 @@ io.use((socket, next) => {
 });
 
 
+
 io.on("connection", async (socket) => {
 
   socket.on("join_room", async (roomId) => {
-
-    console.log("usuario intenta entrar...");
-
-    const user = socket.data.user;
-    const userId = user.id;
-    socket.data.userId = userId;
-
-    const accessSnap = await getRoomAccessForUser(userId, roomId);
-
-    if(!accessSnap.success){
-
-      socket.emit("join_room_error", {user: user, message: "usuario sin permisos", success : false});
   
-      console.log("Usuario sin permiso...");
+    try {
+      if (!roomId) {
+        socket.emit("join_room_error", {
+          user:null,
+          message: "roomId inválido",
+          success: false
+        });
+        return;
+      }    
   
-      socket.disconnect(true);
+      console.log("usuario intenta entrar...");
   
-      return;
+      const user = socket.data.user;
+      const userId = user.id;
+      socket.data.userId = userId;
+  
+      const accessSnap = await getRoomAccessForUser(userId, roomId);
+  
+      if(!accessSnap.success){
+  
+        socket.emit("join_room_error", {user: user, message: "usuario sin permisos", success : false});
+    
+        console.log("Usuario sin permiso...");
+    
+        socket.disconnect(true);
+    
+        return;
+      }
+  
+      socket.data.roomId = roomId;
+  
+      socket.join(roomId);
+  
+      console.log("usuario ingresa a la sala...");
+  
+      const connectionSnap = await createConnection(userId, roomId);
+  
+      if (!connectionSnap.success){
+  
+        socket.emit("join_room_error",{user:user, message: "error al crear conexión", success: false});
+        return;
+      } 
+  
+      socket.emit("join_room_success",{user:user, message: "conectado correctamente", success: true });
+      socket.to(roomId).emit("join_room_success",{user:user, message: "acceso exitoso", success: true});
+
+    } catch(error){
+      console.error("join_room error:", error);
+      socket.emit("join_room_error", { user: null, message: "Error interno", success: false });
     }
 
-    socket.data.roomId = roomId;
-
-    socket.join(roomId);
-
-    console.log("usuario ingresa a la sala...");
-
-    const connectionSnap = await createConnection(userId, roomId);
-
-    if (!connectionSnap.success){
-
-      socket.to(roomId).emit("join_room_error",{user:user, message: "error al crear conexión", success: false});
-      return;
-    } 
-
-    socket.to(roomId).emit("join_room_success",{user:user, message: "acceso exitoso", success: true});
-
-
+   
   });
 
-  socket.on("disconnect", async () =>{
+  socket.on("disconnect", async () => {
 
-    const user = socket.data.user;
-    const userId = socket.data.userId;
-    const roomId = socket.data.roomId;
+    try {
 
-    await leftConnection(userId, roomId);
+      const userId = socket.data.userId;
+      const roomId = socket.data.roomId;
+    
+      if (userId && roomId) {
+        await leftConnection(userId, roomId);
+        socket.to(roomId).emit("disconnect", {
+          user: socket.data.user,
+          message: "usuario desconectado",
+          success: true
+        });
+      }
 
-    socket.to(roomId).emit("disconnect",{user:user, message: "usuario desconectado", success: true});
+    } catch(error){
+      socket.emit("disconect_error", { user: null, message: "Error interno", success: false });
+      console.error("disconnect handler error:", error);
+    }
 
   });
+  
 
   socket.on("send_access", async (roomId) => {
+
+    if (!roomId) return;
+    if (!socket.data.userId) return;
+
 
     const userId = socket.data.userId;
 
@@ -114,7 +149,19 @@ io.on("connection", async (socket) => {
       }
     }
   
+  });
+
   socket.on("grant_access", async ({ roomId, targetUserId }) => {
+
+    if (!roomId) return;
+    if (!socket.data.userId) return;
+
+    if (!socket.rooms.has(roomId)) {
+      return socket.emit("grant_access_error", {
+        success: false,
+        message: "Debes estar en la sala para otorgar acceso"
+      });
+    }    
 
     const admin = socket.data.user;
     const adminId = admin.id;
@@ -152,22 +199,45 @@ io.on("connection", async (socket) => {
       message: "Acceso creado"
     });
   });
-  });
 
 
   socket.on("message", async (msg, visibility, target) => {
+
+    if (!socket.data.userId) return;
     
-    const user = socket.data.user;
     const userId = socket.data.userId;
     const roomId = socket.data.roomId;
+
+    if (visibility !== "public" && visibility !== "private") {
+      return socket.emit("message_error", {
+        message: "visibility inválida",
+        success: false
+      });
+    }    
+
+    if (!msg || typeof msg !== "string") {
+      return socket.emit("message_error", {
+        message: "mensaje inválido",
+        success: false
+      });
+    }
 
     const room = io.sockets.adapter.rooms.get(roomId);
     if (!room) return;
 
+    if (!socket.rooms.has(roomId)) {
+      return socket.emit("message_error", { message: "No estás en la sala", success: false });
+    }
+    
+
     const connection = await db.collection("rooms").doc(roomId).collection("connections").where("userId","==",userId).get();
 
     if(connection.empty){
-      socket.to(roomId).emit("join_room_error",{user:user, success: false});
+      socket.emit("message_error", {
+        message: "el usuario no tiene conexión activa en la sala",
+        success: false
+      });
+      
       return;
     }
 
@@ -187,7 +257,8 @@ io.on("connection", async (socket) => {
     }
 
     if(visibility === "public"){
-      socket.to(roomId).emit("message_success",{content : msg, success: true, visibility: "public"});
+      socket.emit("message_success", { content: msg, success: true, visibility: "public" });
+      socket.to(roomId).emit("new_success",{content : msg, success: true, visibility: "public"});
     }
 
     if(visibility === "private"){
@@ -267,8 +338,9 @@ app.use((req,res) => {
     res.status(404).json({error: "Route not found"});
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+
+server.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
 
 
