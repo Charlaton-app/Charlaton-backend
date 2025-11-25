@@ -94,7 +94,48 @@ export const sendMessageTo = (target: any[], userId: string): boolean => {
 };
 
 /**
- * Controller to create a new message in a room
+ * Controller to create a new message via HTTP POST (for REST API)
+ * 
+ * @async
+ * @param {Request} req - Express request object with message data in body
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON with created message or error
+ */
+export const createMessageHTTP = async (req: Request, res: Response) => {
+  try {
+    const { userId, roomId, content, visibility, target } = req.body;
+
+    if (!userId || !roomId || !content) {
+      return res.status(400).json({ error: "userId, roomId, and content are required" });
+    }
+
+    const messageRef = await db
+      .collection("rooms")
+      .doc(roomId)
+      .collection("messages")
+      .add({
+        userId,
+        roomId,
+        content,
+        visibility: visibility || "public",
+        target: target || null,
+        createAt: new Date(),
+      });
+
+    const message = await messageRef.get();
+
+    return res.status(201).json({
+      id: message.id,
+      ...message.data(),
+    });
+  } catch (error) {
+    console.error("Error creating message:", error);
+    return res.status(500).json({ error: "Error creating message" });
+  }
+};
+
+/**
+ * Controller to create a new message (WebSocket helper function)
  * Supports public, private, and group visibility modes
  * 
  * @async

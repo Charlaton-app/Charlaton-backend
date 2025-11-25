@@ -9,7 +9,7 @@ import { Router } from "express";
 import {
   getAllMessageOfUserInRoom,
   getAllMessagesByRoom,
-  createMessage,
+  createMessageHTTP,
   updateContentMessage,
   deleteMessage,
 } from "../controllers/message.controller";
@@ -71,7 +71,7 @@ router.get("/room/:roomId", verifyToken, getAllMessagesByRoom);
  * @returns {object} 401 - Not authenticated
  * @returns {object} 500 - Server error
  */
-router.post("/", verifyToken, createMessage);
+router.post("/", verifyToken, createMessageHTTP);
 
 /**
  * @route PUT /message/:id
