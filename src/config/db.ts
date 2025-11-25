@@ -1,25 +1,40 @@
+/**
+ * Firebase Admin SDK configuration module
+ * Initializes Firebase Admin and exports Firestore database instance
+ * 
+ * @module config/db
+ * @requires firebase-admin
+ * @requires dotenv
+ * @requires path
+ * @requires fs
+ */
+
 import admin from "firebase-admin";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 
-// Cargar variables de entorno
+// Load environment variables
 dotenv.config();
 
-// Obtener credenciales de Firebase
+/**
+ * Firebase service account credentials
+ * Loaded from either environment variable (production) or local file (development)
+ * @type {admin.ServiceAccount}
+ */
 let serviceAccount;
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  // Producción: leer desde variable de entorno (JSON como string)
+  // Production: read from environment variable (JSON as string)
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 } else if (process.env.FIREBASE_KEY_PATH) {
-  // Desarrollo: leer desde archivo local
-  // Resolver la ruta relativa al directorio raíz del proyecto
+  // Development: read from local file
+  // Resolve relative path to project root directory
   const firebaseKeyPath = path.isAbsolute(process.env.FIREBASE_KEY_PATH)
     ? process.env.FIREBASE_KEY_PATH
     : path.resolve(process.cwd(), process.env.FIREBASE_KEY_PATH);
   
-  // Verificar que el archivo existe
+  // Verify that the file exists
   if (!fs.existsSync(firebaseKeyPath)) {
     throw new Error(
       `Firebase key file not found at: ${firebaseKeyPath}\n` +
@@ -35,8 +50,16 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   );
 }
 
+/**
+ * Initialize Firebase Admin SDK with service account credentials
+ */
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
+/**
+ * Firestore database instance
+ * Used throughout the application for database operations
+ * @type {admin.firestore.Firestore}
+ */
 export const db = admin.firestore();

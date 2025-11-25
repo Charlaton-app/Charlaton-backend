@@ -1,11 +1,10 @@
 /**
- * User Connection Controller
- * Manages user connections/sessions in rooms (join/leave tracking)
+ * User Connection Functions
+ * Helper functions for managing user connections/sessions in rooms
  * 
- * @module controllers/userConnection
+ * @module functions/userConnection
  */
 
-import { Request, Response } from "express";
 import { db } from "../config/db";
 
 const ROOMS = db.collection("rooms");
@@ -14,13 +13,11 @@ const ROOMS = db.collection("rooms");
  * Get all connections for a specific room
  * 
  * @async
- * @param {Request} req - Express request object (roomId in params)
- * @param {Response} res - Express response object
- * @returns {Promise<Response>} JSON array of connections or error
+ * @param {any} roomId - Room ID to get connections from
+ * @returns {Promise<object>} Object with connections array, message, and success status
  */
-export const getConnectionsByRoom = async (req: Request, res: Response) => {
+export const getConnectionsByRoom = async (roomId: any) => {
   try {
-    const { roomId } = req.params;
 
     const snap = await ROOMS.doc(roomId).collection("connections").get();
 
@@ -29,9 +26,9 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
       ...d.data(),
     }));
 
-    res.json(connections);
+    return {connections: connections, message: "connections found", success: true};
   } catch {
-    res.status(500).json({ error: "Error al obtener conexiones" });
+    return {message: "connections not found", success: true};
   }
 };
 
@@ -43,12 +40,12 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
  * @async
  * @param {any} userId - User ID joining the room
  * @param {any} roomId - Room ID being joined
- * @returns {Promise<object>} Object with user and success status
+ * @returns {Promise<object>} Object with user, connection data, and success status
  */
 export const createConnection = async (userId: any , roomId: any) => {
   try {
 
-    // Search for previous active connection
+    // Search for previous connection
     const snap = await ROOMS.doc(String(roomId))
       .collection("connections")
       .where("userId", "==", Number(userId))
@@ -69,7 +66,7 @@ export const createConnection = async (userId: any , roomId: any) => {
         .doc(id)
         .update(updated);
 
-      return {user: userId, success: true};
+      return {user: userId, connection: updated, success: true};
     }
 
     // Create new connection
@@ -83,9 +80,9 @@ export const createConnection = async (userId: any , roomId: any) => {
 
     await ref.set(newConn);
 
-    return {user: userId, success: true};
+    return {user: userId, connection: newConn, success: true};
   } catch {
-    return {user: userId, success: false};
+    return {user: userId, connection: null, success: false};
   }
 };
 
@@ -96,7 +93,7 @@ export const createConnection = async (userId: any , roomId: any) => {
  * @async
  * @param {any} userId - User ID leaving the room
  * @param {any} roomId - Room ID being left
- * @returns {Promise<object>} Object with user and success status
+ * @returns {Promise<object>} Object with user, connection data, and success status
  */
 export const leftConnection = async (userId: any, roomId: any) => {
   try {
@@ -108,7 +105,7 @@ export const leftConnection = async (userId: any, roomId: any) => {
       .get();
 
     if (snap.empty)
-      return {user: userId, success: false};
+      return {user: userId, connection: null, success: false};
 
     const docId = snap.docs[0].id;
 
@@ -116,13 +113,13 @@ export const leftConnection = async (userId: any, roomId: any) => {
       leftAt: new Date().toISOString(),
     };
 
-    await ROOMS.doc(String(roomId))
+    const update = await ROOMS.doc(String(roomId))
       .collection("connections")
       .doc(docId)
       .update(updated);
 
-    return {user: userId, success: true};
+    return {user: userId, connection: update, success: true};
   } catch {
-    return {user: userId, success: true};
+    return {user: userId, connection: null, success: true};
   }
 };
