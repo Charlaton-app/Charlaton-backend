@@ -18,11 +18,10 @@ import { createMessage, sendMessageTo } from "./controllers/message.controller";
 import { existsAdmin, getAdminsInRoom } from "./functions/room.functions";
 import { createRoomAccess } from "./functions/roomAccess.functions";
 
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
-const io = new Server(server,  { cors: { origin: "*" } }); // para pruebas con el cors, debe cambiarse
+const io = new Server(server, { cors: { origin: "*" } }); // para pruebas con el cors, debe cambiarse
 
 // configuración del servidor websocket
 
@@ -37,11 +36,8 @@ io.use((socket, next) => {
   }
 });
 
-
 io.on("connection", async (socket) => {
-
   socket.on("join_room", async (roomId) => {
-
     console.log("usuario intenta entrar...");
 
     const user = socket.data.user;
@@ -50,14 +46,17 @@ io.on("connection", async (socket) => {
 
     const accessSnap = await getRoomAccessForUser(userId, roomId);
 
-    if(!accessSnap.success){
+    if (!accessSnap.success) {
+      socket.emit("join_room_error", {
+        user: user,
+        message: "usuario sin permisos",
+        success: false,
+      });
 
-      socket.emit("join_room_error", {user: user, message: "usuario sin permisos", success : false});
-  
       console.log("Usuario sin permiso...");
-  
+
       socket.disconnect(true);
-  
+
       return;
     }
 
@@ -69,31 +68,43 @@ io.on("connection", async (socket) => {
 
     const connectionSnap = await createConnectionAux(userId, roomId);
 
-    if (!connectionSnap.success){
-
-      socket.to(roomId).emit("join_room_error",{user:user, message: "error al crear conexión", success: false});
+    if (!connectionSnap.success) {
+      socket
+        .to(roomId)
+        .emit("join_room_error", {
+          user: user,
+          message: "error al crear conexión",
+          success: false,
+        });
       return;
-    } 
+    }
 
-    socket.to(roomId).emit("join_room_success",{user:user, message: "acceso exitoso", success: true});
-
-
+    socket
+      .to(roomId)
+      .emit("join_room_success", {
+        user: user,
+        message: "acceso exitoso",
+        success: true,
+      });
   });
 
-  socket.on("disconnect", async () =>{
-
+  socket.on("disconnect", async () => {
     const user = socket.data.user;
     const userId = socket.data.userId;
     const roomId = socket.data.roomId;
 
     await leftConnectionAux(userId, roomId);
 
-    socket.to(roomId).emit("disconnect",{user:user, message: "usuario desconectado", success: true});
-
+    socket
+      .to(roomId)
+      .emit("disconnect", {
+        user: user,
+        message: "usuario desconectado",
+        success: true,
+      });
   });
 
   socket.on("send_access", async (roomId) => {
-
     const userId = socket.data.userId;
 
     const adminsId = await getAdminsInRoom(roomId);
@@ -104,59 +115,57 @@ io.on("connection", async (socket) => {
     for (const socketId of room) {
       const clientSocket = io.sockets.sockets.get(socketId);
       if (!clientSocket) continue;
-  
+
       if (adminsId.includes(clientSocket.data.userId)) {
         clientSocket.emit("send_access", {
           userId,
           roomId,
-          message: "El usuario solicita acceso"
+          message: "El usuario solicita acceso",
         });
       }
     }
-  
-  socket.on("grant_access", async ({ roomId, targetUserId }) => {
 
-    const admin = socket.data.user;
-    const adminId = admin.id;
-    
-    const isAdmin = await existsAdmin(roomId, adminId);
-    const roomSnap = await db.collection("rooms").doc(roomId).get();
-    const creatorId = roomSnap.data()?.creatorId;
-    
-    if (!isAdmin && adminId !== creatorId) {
-      return socket.emit("grant_access_error", {
-        success: false,
-        message: "No eres admin ni creador"
-      });
-    }
-    
-    await createRoomAccess(targetUserId,roomId,adminId); 
-    
-    const room = io.sockets.adapter.rooms.get(roomId);
-    if(!room) return;
-    
-    for (const socketId of room) {
-      const clientSocket = io.sockets.sockets.get(socketId);
-      if (!clientSocket) continue;
-    
-      if (clientSocket.data.userId === targetUserId) {
-        clientSocket.emit("access_granted", { // este es el evento que recibe el usuario
-          roomId,
-          message: "Tu acceso fue aceptado"
+    socket.on("grant_access", async ({ roomId, targetUserId }) => {
+      const admin = socket.data.user;
+      const adminId = admin.id;
+
+      const isAdmin = await existsAdmin(roomId, adminId);
+      const roomSnap = await db.collection("rooms").doc(roomId).get();
+      const creatorId = roomSnap.data()?.creatorId;
+
+      if (!isAdmin && adminId !== creatorId) {
+        return socket.emit("grant_access_error", {
+          success: false,
+          message: "No eres admin ni creador",
         });
       }
-    }
-    
-    socket.emit("grant_access_success", {
-      success: true,
-      message: "Acceso creado"
+
+      await createRoomAccess(targetUserId, roomId, adminId);
+
+      const room = io.sockets.adapter.rooms.get(roomId);
+      if (!room) return;
+
+      for (const socketId of room) {
+        const clientSocket = io.sockets.sockets.get(socketId);
+        if (!clientSocket) continue;
+
+        if (clientSocket.data.userId === targetUserId) {
+          clientSocket.emit("access_granted", {
+            // este es el evento que recibe el usuario
+            roomId,
+            message: "Tu acceso fue aceptado",
+          });
+        }
+      }
+
+      socket.emit("grant_access_success", {
+        success: true,
+        message: "Acceso creado",
+      });
     });
   });
-  });
-
 
   socket.on("message", async (msg, visibility, target) => {
-    
     const user = socket.data.user;
     const userId = socket.data.userId;
     const roomId = socket.data.roomId;
@@ -164,82 +173,97 @@ io.on("connection", async (socket) => {
     const room = io.sockets.adapter.rooms.get(roomId);
     if (!room) return;
 
-    const connection = await db.collection("rooms").doc(roomId).collection("connections").where("userId","==",userId).get();
+    const connection = await db
+      .collection("rooms")
+      .doc(roomId)
+      .collection("connections")
+      .where("userId", "==", userId)
+      .get();
 
-    if(connection.empty){
-      socket.to(roomId).emit("join_room_error",{user:user, success: false});
+    if (connection.empty) {
+      socket.to(roomId).emit("join_room_error", { user: user, success: false });
       return;
     }
 
     const data = {
-      userId : userId,
-      roomId : roomId,
-      content : msg,
-      visibility : visibility,
-      target : target
+      userId: userId,
+      roomId: roomId,
+      content: msg,
+      visibility: visibility,
+      target: target,
     };
 
     const message = await createMessage(data);
-    
-    if(!message.success){
-      socket.to(roomId).emit("message_error",{message:"error", success: false});
+
+    if (!message.success) {
+      socket
+        .to(roomId)
+        .emit("message_error", { message: "error", success: false });
       return;
     }
 
-    if(visibility === "public"){
-      socket.to(roomId).emit("message_success",{content : msg, success: true, visibility: "public"});
+    if (visibility === "public") {
+      socket
+        .to(roomId)
+        .emit("message_success", {
+          content: msg,
+          success: true,
+          visibility: "public",
+        });
     }
 
-    if(visibility === "private"){
-      
+    if (visibility === "private") {
       for (const socketId of room) {
-
         const clientSocket = io.sockets.sockets.get(socketId);
         if (!clientSocket) continue;
 
         if (sendMessageTo(target, clientSocket.data.userId)) {
-      
           clientSocket.emit("message_success", {
             content: msg,
             success: true,
-            visibility: "private"
+            visibility: "private",
           });
-      
         }
       }
     }
-
   });
 
+  // Handle microphone toggle
+  socket.on("toggleMic", ({ roomId, userId, isOn }) => {
+    console.log(`[SOCKET] Mic toggle: User ${userId}, isOn: ${isOn}`);
+    // Broadcast to all other users in the room
+    socket.to(roomId).emit("micStateChanged", { userId, isOn });
+  });
 
-
-
-
-  
-
+  // Handle camera toggle
+  socket.on("toggleCamera", ({ roomId, userId, isOn }) => {
+    console.log(`[SOCKET] Camera toggle: User ${userId}, isOn: ${isOn}`);
+    // Broadcast to all other users in the room
+    socket.to(roomId).emit("cameraStateChanged", { userId, isOn });
+  });
 });
 
 // CORS configuration - uses environment variables only
 // FRONTEND_URL should contain the full URL of your frontend (e.g., https://charlaton-frontend.vercel.app)
 const getAllowedOrigins = (): string[] => {
   const origins: string[] = [];
-  
+
   // Add FRONTEND_URL if provided (should be the complete URL with protocol)
   if (process.env.FRONTEND_URL) {
     const frontendUrl = process.env.FRONTEND_URL.trim();
     // Ensure URL has protocol
-    if (frontendUrl && !frontendUrl.startsWith('http')) {
+    if (frontendUrl && !frontendUrl.startsWith("http")) {
       origins.push(`https://${frontendUrl}`);
     } else if (frontendUrl) {
       origins.push(frontendUrl);
     }
   }
-  
+
   // Add localhost for development
   if (process.env.NODE_ENV !== "production") {
     origins.push("http://localhost:5173");
   }
-  
+
   return origins;
 };
 
@@ -252,7 +276,7 @@ app.use(
       if (!origin) {
         return callback(null, true);
       }
-      
+
       if (allowedOrigins.length === 0) {
         // If no origins configured, allow all in development
         if (process.env.NODE_ENV !== "production") {
@@ -260,7 +284,7 @@ app.use(
         }
         return callback(new Error("CORS: No allowed origins configured"));
       }
-      
+
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -274,33 +298,28 @@ app.use(
 
 app.use(cookieParser());
 app.use(express.json());
-app.use(express.urlencoded({extended: true}));
-
+app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.use("/api/user",userRoutes);
+app.use("/api/user", userRoutes);
 app.use("/api/room", roomRoutes);
 app.use("/api/access", roomAccessRoutes);
 app.use("/api/connection", userConnectionRoutes);
 app.use("/api/message", messageRoutes);
 app.use("/api/auth", authRoutes);
 
-
 // home endpoint
 
 app.get("/", (req, res) => {
-    res.json({message: "API up"});
+  res.json({ message: "API up" });
 });
 
 // Error handler
 
-app.use((req,res) => {
-    res.status(404).json({error: "Route not found"});
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
 });
 
 server.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
-
-
-

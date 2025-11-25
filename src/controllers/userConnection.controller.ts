@@ -1,7 +1,7 @@
 /**
  * User Connection Controller
  * Manages user connections/sessions in rooms (join/leave tracking)
- * 
+ *
  * @module controllers/userConnection
  */
 
@@ -11,12 +11,12 @@ import { db } from "../config/db";
 const ROOMS = db.collection("rooms");
 
 /**
- * Get all connections for a specific room
- * 
+ * Get all connections for a specific room with user data populated
+ *
  * @async
  * @param {Request} req - Express request object (roomId in params)
  * @param {Response} res - Express response object
- * @returns {Promise<Response>} JSON array of connections or error
+ * @returns {Promise<Response>} JSON array of connections with user data or error
  */
 export const getConnectionsByRoom = async (req: Request, res: Response) => {
   try {
@@ -29,8 +29,39 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
       ...d.data(),
     }));
 
-    res.json(connections);
-  } catch {
+    // Fetch user data for each connection
+    const USERS = db.collection("users");
+    const connectionsWithUsers = await Promise.all(
+      connections.map(async (conn: any) => {
+        if (!conn.userId) return conn;
+
+        try {
+          const userDoc = await USERS.doc(String(conn.userId)).get();
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            return {
+              ...conn,
+              userId: String(conn.userId), // Ensure userId is string
+              roomId,
+              user: {
+                id: userDoc.id,
+                email: userData?.email || null,
+                nickname: userData?.nickname || null,
+                displayName: userData?.nickname || userData?.email?.split('@')[0] || null,
+              },
+            };
+          }
+        } catch (err) {
+          console.error(`Error fetching user ${conn.userId}:`, err);
+        }
+
+        return conn;
+      })
+    );
+
+    res.json(connectionsWithUsers);
+  } catch (error) {
+    console.error("Error in getConnectionsByRoom:", error);
     res.status(500).json({ error: "Error al obtener conexiones" });
   }
 };
@@ -39,15 +70,14 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
  * Create or refresh user connection to a room (auxiliary function)
  * If an active connection exists, updates joinedAt timestamp
  * Otherwise, creates a new connection
- * 
+ *
  * @async
  * @param {any} userId - User ID joining the room
  * @param {any} roomId - Room ID being joined
  * @returns {Promise<object>} Object with user and success status
  */
-export const createConnectionAux = async (userId: any , roomId: any) => {
+export const createConnectionAux = async (userId: any, roomId: any) => {
   try {
-
     // Search for previous active connection
     const snap = await ROOMS.doc(String(roomId))
       .collection("connections")
@@ -69,7 +99,7 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
         .doc(id)
         .update(updated);
 
-      return {user: userId, success: true};
+      return { user: userId, success: true };
     }
 
     // Create new connection
@@ -83,16 +113,16 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
 
     await ref.set(newConn);
 
-    return {user: userId, success: true};
+    return { user: userId, success: true };
   } catch {
-    return {user: userId, success: false};
+    return { user: userId, success: false };
   }
 };
 
 /**
  * Mark user exit from room (auxiliary function)
  * Sets leftAt timestamp for active connection
- * 
+ *
  * @async
  * @param {any} userId - User ID leaving the room
  * @param {any} roomId - Room ID being left
@@ -100,15 +130,13 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
  */
 export const leftConnectionAux = async (userId: any, roomId: any) => {
   try {
-
     const snap = await ROOMS.doc(String(roomId))
       .collection("connections")
       .where("userId", "==", Number(userId))
       .where("leftAt", "==", null)
       .get();
 
-    if (snap.empty)
-      return {user: userId, success: false};
+    if (snap.empty) return { user: userId, success: false };
 
     const docId = snap.docs[0].id;
 
@@ -121,15 +149,15 @@ export const leftConnectionAux = async (userId: any, roomId: any) => {
       .doc(docId)
       .update(updated);
 
-    return {user: userId, success: true};
+    return { user: userId, success: true };
   } catch {
-    return {user: userId, success: true};
+    return { user: userId, success: true };
   }
 };
 
 /**
  * HTTP Controller: Create or refresh user connection to a room
- * 
+ *
  * @async
  * @param {Request} req - Express request object (userId and roomId in body)
  * @param {Response} res - Express response object
@@ -158,7 +186,7 @@ export const createConnection = async (req: Request, res: Response) => {
 
 /**
  * HTTP Controller: Mark user exit from room
- * 
+ *
  * @async
  * @param {Request} req - Express request object (userId and roomId in body)
  * @param {Response} res - Express response object
