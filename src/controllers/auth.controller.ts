@@ -5,7 +5,6 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import admin from "firebase-admin";
 import { db } from "../config/db";
-import { UserCreateInput, UserResponse } from "../types";
 import sendEmail from "../utils/sendEmail";
 import {
   generateAccessToken,
@@ -14,20 +13,38 @@ import {
 
 const SALT_ROUNDS = 10;
 
-// Helpers para cookies (mismos nombres que usabas)
+/**
+ * Opciones de configuración para las cookies de autenticación.
+ * Define las propiedades de seguridad según el entorno (producción o desarrollo).
+ */
 const COOKIE_OPTIONS = {
+  /**
+   * Opciones para la cookie de access token
+   * @param {boolean} prod - Indica si está en entorno de producción
+   * @returns {object} Configuración de la cookie con httpOnly, secure, sameSite y maxAge (24 horas)
+   */
   access: (prod = false) => ({
     httpOnly: true,
     secure: prod,
     sameSite: (prod ? "none" : "lax") as "none" | "lax",
     maxAge: 24 * 60 * 60 * 1000,
   }),
+  /**
+   * Opciones para la cookie de refresh token
+   * @param {boolean} prod - Indica si está en entorno de producción
+   * @returns {object} Configuración de la cookie con httpOnly, secure, sameSite y maxAge (7 días)
+   */
   refresh: (prod = false) => ({
     httpOnly: true,
     secure: prod,
     sameSite: (prod ? "none" : "lax") as "none" | "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   }),
+  /**
+   * Opciones para la cookie de device ID
+   * @param {boolean} prod - Indica si está en entorno de producción
+   * @returns {object} Configuración de la cookie con httpOnly, secure, sameSite y maxAge (365 días)
+   */
   device: (prod = false) => ({
     httpOnly: true,
     secure: prod,
@@ -36,10 +53,17 @@ const COOKIE_OPTIONS = {
   }),
 };
 
-
 // ---------------------------
 // Utility: excludePassword
 // ---------------------------
+/**
+ * Excluye la contraseña del objeto de usuario y obtiene información del rol.
+ * Consulta la colección de roles para obtener el tipo de rol asociado al usuario.
+ *
+ * @async
+ * @param {any} userDoc - Documento del usuario con campos id, email, nickname, rolId, etc.
+ * @returns {Promise<object|null>} Objeto con datos del usuario sin contraseña y con tipo de rol, o null si no existe el usuario
+ */
 export const excludePassword = async (userDoc: any) => {
   if (!userDoc) return null;
   // userDoc expected to be { id, ...fields }
@@ -73,6 +97,14 @@ export const excludePassword = async (userDoc: any) => {
 // Helper: find session by refreshToken (collectionGroup)
 // Returns: { docRef, data, userId }
 // ---------------------------
+/**
+ * Busca una sesión por refresh token utilizando collectionGroup.
+ * Recorre todas las subcolecciones 'sessions' en la base de datos.
+ *
+ * @async
+ * @param {string} refreshToken - Token de actualización a buscar
+ * @returns {Promise<object|null>} Objeto con docRef (referencia del documento), data (datos de la sesión) y userId, o null si no se encuentra
+ */
 const findSessionByRefreshToken = async (refreshToken: string) => {
   const snap = await db
     .collectionGroup("sessions")
@@ -94,6 +126,16 @@ const findSessionByRefreshToken = async (refreshToken: string) => {
 // ---------------------------
 // refreshToken
 // ---------------------------
+/**
+ * Controlador para refrescar el access token usando el refresh token.
+ * Valida el refresh token, verifica que la sesión no esté revocada,
+ * y genera un nuevo access token si todo es válido.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener refresh token en cookies)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito o error
+ */
 export const refreshToken = async (req: Request, res: Response) => {
   try {
     const tokenFromCookie =
@@ -120,15 +162,24 @@ export const refreshToken = async (req: Request, res: Response) => {
     }
 
     // Obtener user
-    const userDoc = await db.collection("users").doc(sessionRecord.userId).get();
+    const userDoc = await db
+      .collection("users")
+      .doc(sessionRecord.userId)
+      .get();
     if (!userDoc.exists)
-      return res.status(403).json({ error: "User linked to session not found" });
+      return res
+        .status(403)
+        .json({ error: "User linked to session not found" });
 
     const user = { id: userDoc.id, ...(userDoc.data() as any) };
 
     const newAccessToken = generateAccessToken(user.id, user.email);
 
-    res.cookie("AccessToken", newAccessToken, COOKIE_OPTIONS.access(process.env.NODE_ENV === "production"));
+    res.cookie(
+      "AccessToken",
+      newAccessToken,
+      COOKIE_OPTIONS.access(process.env.NODE_ENV === "production")
+    );
 
     return res.json({ message: "Token refreshed" });
   } catch (err: any) {
@@ -138,8 +189,118 @@ export const refreshToken = async (req: Request, res: Response) => {
 };
 
 // ---------------------------
+// login OAuth
+// ---------------------------
+
+export const loginOAuth = async (req: Request, res: Response) => {
+  try {
+    const { idToken } = req.body; // Token que envía el frontend
+    const deviceId =
+      req.cookies.deviceId || req.cookies.deviceid || crypto.randomUUID();
+
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const { uid, email, name } = decodedToken;
+
+    const q = await db
+      .collection("users")
+      .where("uid", "==", uid)
+      .limit(1)
+      .get();
+    let user;
+
+    if (q.empty) {
+      const created = await db.collection("users").add({
+        uid, // guardamos el uid de Firebase
+        email,
+        name: name || null,
+        birth_date: null,
+        rolId: 1, // default
+        createdAt: new Date(),
+      });
+      const doc = await created.get();
+      user = { id: doc.id, ...(doc.data() as any) };
+    } else {
+      user = { id: q.docs[0].id, ...(q.docs[0].data() as any) };
+    }
+
+    const accessToken = generateAccessToken(user.id, user.email);
+    const refreshToken = generateRefreshToken(user.id);
+
+    const sessionsColRef = db
+      .collection("users")
+      .doc(user.id)
+      .collection("sessions");
+    const sessionDocId = deviceId;
+
+    const now = new Date();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const existingSessionRef = sessionsColRef.doc(sessionDocId);
+    const existingSessionSnap = await existingSessionRef.get();
+
+    if (existingSessionSnap.exists) {
+      await existingSessionRef.update({
+        refreshToken,
+        lastUsedAt: admin.firestore.Timestamp.fromDate(now),
+        userAgent: req.headers["user-agent"] || "Unknown",
+        ip: req.ip || req.headers["x-forwarded-for"] || "unknown",
+        revoke: false,
+      });
+    } else {
+      await existingSessionRef.set({
+        tokenId: crypto.randomUUID(),
+        refreshToken,
+        deviceId,
+        userAgent: req.headers["user-agent"] || "Unknown",
+        ip: req.ip || req.headers["x-forwarded-for"] || "unknown",
+        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+        revoke: false,
+        createdAt: admin.firestore.Timestamp.fromDate(now),
+        lastUsedAt: admin.firestore.Timestamp.fromDate(now),
+      });
+    }
+
+    const prod = process.env.NODE_ENV === "production";
+    res.cookie("AccessToken", accessToken, COOKIE_OPTIONS.access(prod));
+    res.cookie("RefreshToken", refreshToken, COOKIE_OPTIONS.refresh(prod));
+    res.cookie("deviceId", deviceId, COOKIE_OPTIONS.device(prod));
+
+    const profileComplete = Boolean(user.birthdate);
+
+    if (!profileComplete) {
+      // El usuario está logueado pero su perfil está incompleto
+      return res.status(200).json({
+        status: "profile_incomplete",
+        message: "El usuario debe completar su perfil.",
+        user,
+        required: ["birthdate"],
+      });
+    }
+
+    return res.status(200).json({
+      message: "Inicio de sesión OAuth exitoso",
+      user,
+    });
+  } catch (error) {
+    console.error("Error en loginOAuth:", error);
+    return res.status(500).json({ error: "Error al iniciar sesión con OAuth" });
+  }
+};
+
+// ---------------------------
 // login
 // ---------------------------
+/**
+ * Controlador para iniciar sesión de usuario.
+ * Valida credenciales, crea o actualiza la sesión del dispositivo,
+ * y establece cookies con tokens de acceso y actualización.
+ * Soporta autenticación OAuth (Google, Facebook) y contraseñas tradicionales.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener email y password en body)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito y datos del usuario sin contraseña
+ */
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -163,9 +324,10 @@ export const login = async (req: Request, res: Response) => {
 
     // Permitir login con contraseñas OAuth
     // Si la contraseña es OAuth, permitir login directamente (Firebase ya autenticó)
-    const isOAuthPassword = password === "GOOGLE_OAUTH_USER" || password === "FACEBOOK_OAUTH_USER";
+    const isOAuthPassword =
+      password === "GOOGLE_OAUTH_USER" || password === "FACEBOOK_OAUTH_USER";
     let isPasswordValid = false;
-    
+
     if (isOAuthPassword) {
       // Para OAuth, Firebase ya autenticó al usuario, así que permitir login
       // Intentar verificar si la contraseña guardada también es OAuth (puede estar hasheada)
@@ -179,7 +341,7 @@ export const login = async (req: Request, res: Response) => {
       // Para contraseñas normales, verificar con bcrypt
       isPasswordValid = await bcrypt.compare(password, user.password);
     }
-    
+
     if (!isPasswordValid)
       return res.status(401).json({ error: "Credenciales inválidas" });
 
@@ -190,7 +352,10 @@ export const login = async (req: Request, res: Response) => {
       deviceId = crypto.randomUUID();
     }
 
-    const sessionsColRef = db.collection("users").doc(user.id).collection("sessions");
+    const sessionsColRef = db
+      .collection("users")
+      .doc(user.id)
+      .collection("sessions");
     const sessionDocId = deviceId; // usamos deviceId como id de documento para unicidad por device
 
     const existingSessionRef = sessionsColRef.doc(sessionDocId);
@@ -240,6 +405,15 @@ export const login = async (req: Request, res: Response) => {
 // ---------------------------
 // allLogout (eliminar sesión por refreshToken)
 // ---------------------------
+/**
+ * Controlador para cerrar todas las sesiones asociadas al refresh token actual.
+ * Elimina físicamente los documentos de sesión de la base de datos.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener refresh token en cookies)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito
+ */
 export const allLogout = async (req: Request, res: Response) => {
   try {
     const tokenFromCookie =
@@ -251,8 +425,18 @@ export const allLogout = async (req: Request, res: Response) => {
     if (!tokenFromCookie) {
       // limpiamos cookies de todas formas
       const prod = process.env.NODE_ENV === "production";
-      res.clearCookie("AccessToken", { httpOnly: true, secure: prod, sameSite: prod ? "none" : "lax", path: "/" });
-      res.clearCookie("RefreshToken", { httpOnly: true, secure: prod, sameSite: prod ? "none" : "lax", path: "/" });
+      res.clearCookie("AccessToken", {
+        httpOnly: true,
+        secure: prod,
+        sameSite: prod ? "none" : "lax",
+        path: "/",
+      });
+      res.clearCookie("RefreshToken", {
+        httpOnly: true,
+        secure: prod,
+        sameSite: prod ? "none" : "lax",
+        path: "/",
+      });
       return res.json({ message: "Sesión cerrada exitosamente" });
     }
 
@@ -267,8 +451,18 @@ export const allLogout = async (req: Request, res: Response) => {
     await batch.commit();
 
     const prod = process.env.NODE_ENV === "production";
-    res.clearCookie("AccessToken", { httpOnly: true, secure: prod, sameSite: prod ? "none" : "lax", path: "/" });
-    res.clearCookie("RefreshToken", { httpOnly: true, secure: prod, sameSite: prod ? "none" : "lax", path: "/" });
+    res.clearCookie("AccessToken", {
+      httpOnly: true,
+      secure: prod,
+      sameSite: prod ? "none" : "lax",
+      path: "/",
+    });
+    res.clearCookie("RefreshToken", {
+      httpOnly: true,
+      secure: prod,
+      sameSite: prod ? "none" : "lax",
+      path: "/",
+    });
 
     return res.json({ message: "Sesión cerrada exitosamente" });
   } catch (err: any) {
@@ -280,6 +474,15 @@ export const allLogout = async (req: Request, res: Response) => {
 // ---------------------------
 // logout (marcar revoke = true)
 // ---------------------------
+/**
+ * Controlador para cerrar sesión actual.
+ * Marca la sesión como revocada sin eliminarla de la base de datos.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener refresh token en cookies)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito
+ */
 export const logout = async (req: Request, res: Response) => {
   try {
     const tokenFromCookie =
@@ -290,8 +493,18 @@ export const logout = async (req: Request, res: Response) => {
 
     if (!tokenFromCookie) {
       const prod = process.env.NODE_ENV === "production";
-      res.clearCookie("AccessToken", { httpOnly: true, secure: prod, sameSite: prod ? "none" : "lax", path: "/" });
-      res.clearCookie("RefreshToken", { httpOnly: true, secure: prod, sameSite: prod ? "none" : "lax", path: "/" });
+      res.clearCookie("AccessToken", {
+        httpOnly: true,
+        secure: prod,
+        sameSite: prod ? "none" : "lax",
+        path: "/",
+      });
+      res.clearCookie("RefreshToken", {
+        httpOnly: true,
+        secure: prod,
+        sameSite: prod ? "none" : "lax",
+        path: "/",
+      });
       return res.json({ message: "Sesión cerrada exitosamente" });
     }
 
@@ -301,8 +514,18 @@ export const logout = async (req: Request, res: Response) => {
     }
 
     const prod = process.env.NODE_ENV === "production";
-    res.clearCookie("AccessToken", { httpOnly: true, secure: prod, sameSite: prod ? "none" : "lax", path: "/" });
-    res.clearCookie("RefreshToken", { httpOnly: true, secure: prod, sameSite: prod ? "none" : "lax", path: "/" });
+    res.clearCookie("AccessToken", {
+      httpOnly: true,
+      secure: prod,
+      sameSite: prod ? "none" : "lax",
+      path: "/",
+    });
+    res.clearCookie("RefreshToken", {
+      httpOnly: true,
+      secure: prod,
+      sameSite: prod ? "none" : "lax",
+      path: "/",
+    });
 
     return res.json({ message: "Sesión cerrada exitosamente" });
   } catch (err: any) {
@@ -314,6 +537,16 @@ export const logout = async (req: Request, res: Response) => {
 // ---------------------------
 // recoverPass
 // ---------------------------
+/**
+ * Controlador para solicitar recuperación de contraseña.
+ * Genera un token de restablecimiento, lo almacena en la base de datos
+ * y envía un correo electrónico con el enlace de recuperación.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener email en body)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con mensaje genérico (para no filtrar emails válidos)
+ */
 export const recoverPass = async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
@@ -378,13 +611,24 @@ export const recoverPass = async (req: Request, res: Response) => {
 // ---------------------------
 // resetPass
 // ---------------------------
+/**
+ * Controlador para restablecer la contraseña usando un token de recuperación.
+ * Valida el token, verifica que no esté usado o expirado, y actualiza la contraseña del usuario.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener token en params, password y confirmPassword en body)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito o error
+ */
 export const resetPass = async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
     const { password, confirmPassword } = req.body;
 
     if (!password || !confirmPassword)
-      return res.status(400).json({ error: "La contraseña y confirmación son requeridas" });
+      return res
+        .status(400)
+        .json({ error: "La contraseña y confirmación son requeridas" });
 
     if (password !== confirmPassword)
       return res.status(400).json({ message: "Las contraseñas no coinciden" });
@@ -418,7 +662,10 @@ export const resetPass = async (req: Request, res: Response) => {
 
     // Comprobar expiración (resetData.expiresAt es Timestamp)
     const expiresAt = resetData.expiresAt;
-    const expiresAtDate = expiresAt instanceof admin.firestore.Timestamp ? expiresAt.toDate() : new Date(expiresAt);
+    const expiresAtDate =
+      expiresAt instanceof admin.firestore.Timestamp
+        ? expiresAt.toDate()
+        : new Date(expiresAt);
     if (expiresAtDate < new Date()) {
       return res.status(400).json({ message: "Token inválido o expirado" });
     }
@@ -442,10 +689,13 @@ export const resetPass = async (req: Request, res: Response) => {
       // continue
     }
 
-    await db.collection("users").doc(userId).update({
-      password: hashedPassword,
-      updatedAt: admin.firestore.Timestamp.fromDate(new Date()),
-    });
+    await db
+      .collection("users")
+      .doc(userId)
+      .update({
+        password: hashedPassword,
+        updatedAt: admin.firestore.Timestamp.fromDate(new Date()),
+      });
 
     // Marcar como usado
     await resetDoc.ref.update({ used: true });
