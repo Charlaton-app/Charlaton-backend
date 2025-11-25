@@ -1,10 +1,18 @@
 import { Request, Response } from "express";
 import { db } from "../config/db";
-import bcrypt from "bcryptjs"; 
+import bcrypt from "bcryptjs";
 import admin from "firebase-admin";
 
 const SALT_ROUNDS = 10;
 
+/**
+ * Verifica si un usuario existe en la base de datos.
+ *
+ * @async
+ * @param {string} userId - ID del usuario a verificar
+ * @param {Response} res - Objeto de respuesta de Express para enviar error si no existe
+ * @returns {Promise<FirebaseFirestore.DocumentSnapshot|null>} Documento del usuario si existe, null si no existe
+ */
 const verifyUser = async (userId: string, res: Response) => {
   const doc = await db.collection("users").doc(userId).get();
   if (!doc.exists) {
@@ -14,6 +22,15 @@ const verifyUser = async (userId: string, res: Response) => {
   return doc;
 };
 
+/**
+ * Controlador para obtener todos los usuarios o buscar un usuario específico por email.
+ * Si se proporciona un query parameter 'email', busca solo ese usuario.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (puede contener email en query params)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con el usuario encontrado o lista de todos los usuarios
+ */
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
     const { email } = req.query;
@@ -43,6 +60,14 @@ export const getAllUsers = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Controlador para obtener un usuario por su ID.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener id en params)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con los datos del usuario o error si no existe
+ */
 export const getUserById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -57,19 +82,26 @@ export const getUserById = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Controlador para crear un nuevo usuario.
+ * Valida que el email no esté registrado, hashea la contraseña y guarda el usuario.
+ * Permite especificar un ID personalizado o generar uno automáticamente.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener email, password, y opcionalmente nickname, rolId, id en body)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con los datos del usuario creado
+ */
 export const createUser = async (req: Request, res: Response) => {
   try {
     const { email, name, last_name, password, birth_date, rolId } = req.body;
-    
+
     if (!email || !password || !name || !birth_date) {
       return res.status(400).json({ error: "Email y password son requeridos" });
     }
 
     // Validar si el correo ya existe
-    const q = await db
-      .collection("users")
-      .where("email", "==", email)
-      .get();
+    const q = await db.collection("users").where("email", "==", email).get();
 
     if (!q.empty) {
       return res.status(400).json({ error: "El correo ya está registrado" });
@@ -79,7 +111,7 @@ export const createUser = async (req: Request, res: Response) => {
 
     const userData = {
       email,
-      name:  name,
+      name: name,
       last_name: last_name || null,
       password: hashed,
       birth_date: birth_date,
@@ -90,7 +122,6 @@ export const createUser = async (req: Request, res: Response) => {
     const created = await db.collection("users").add(userData);
     let doc = await created.get();
 
-
     res.status(201).json({ id: doc.id, ...doc.data() });
   } catch (error) {
     console.error("Error creando usuario:", error);
@@ -98,6 +129,15 @@ export const createUser = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Controlador para cambiar la contraseña de un usuario.
+ * Valida que las contraseñas coincidan, hashea la nueva contraseña y actualiza el usuario.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener id en params, password y confirmPassword en body)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response|void>} Respuesta JSON con mensaje de éxito o error
+ */
 export const changePassword = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -123,6 +163,15 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Controlador para actualizar información de un usuario.
+ * Permite actualizar email y nickname. Otros campos se ignoran.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener id en params, email y/o nickname en body)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response|void>} Respuesta JSON con los datos actualizados del usuario
+ */
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -135,7 +184,7 @@ export const updateUser = async (req: Request, res: Response) => {
     if (email) updateData.email = email;
     if (name) updateData.nickname = name;
     if (last_name) updateData.last_name = last_name;
-    
+
     updateData.updatedAt = new Date();
 
     await db.collection("users").doc(id).update(updateData);
@@ -149,6 +198,14 @@ export const updateUser = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Controlador para eliminar un usuario de la base de datos.
+ *
+ * @async
+ * @param {Request} req - Objeto de solicitud de Express (debe contener id en params)
+ * @param {Response} res - Objeto de respuesta de Express
+ * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito o error
+ */
 export const deleteUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
