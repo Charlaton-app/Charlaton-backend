@@ -228,11 +228,38 @@ export const deleteUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    await db.collection("users").doc(id).delete();
-    await admin.auth().deleteUser(id);
+    const userRef = db.collection("users").doc(id);
+    const userSnap = await userRef.get();
+
+    if (!userSnap.exists) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const userData = userSnap.data() || {};
+
+    await userRef.delete();
+
+    const firebaseUid =
+      userData.uid ||
+      userData.firebaseUid ||
+      userData.firebaseUID ||
+      userData.authUid ||
+      userData.userId ||
+      null;
+
+    if (firebaseUid) {
+      try {
+        await admin.auth().deleteUser(String(firebaseUid));
+      } catch (error: any) {
+        if (error.code !== "auth/user-not-found") {
+          throw error;
+        }
+      }
+    }
 
     res.json({ message: "Usuario eliminado" });
   } catch (error) {
+    console.error("Error eliminando usuario:", error);
     res.status(500).json({ error: "Error al eliminar usuario" });
   }
 };
