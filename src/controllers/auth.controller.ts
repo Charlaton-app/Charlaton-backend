@@ -548,35 +548,7 @@ export const allLogout = async (req: Request, res: Response) => {
  * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito
  */
 export const logout = async (req: Request, res: Response) => {
-  try {
-    const tokenFromCookie =
-      req.cookies.RefreshToken ||
-      req.cookies.refreshToken ||
-      req.cookies.refresh ||
-      null;
-
-    if (!tokenFromCookie) {
-      const prod = process.env.NODE_ENV === "production";
-      res.clearCookie("AccessToken", {
-        httpOnly: true,
-        secure: prod,
-        sameSite: prod ? "none" : "lax",
-        path: "/",
-      });
-      res.clearCookie("RefreshToken", {
-        httpOnly: true,
-        secure: prod,
-        sameSite: prod ? "none" : "lax",
-        path: "/",
-      });
-      return res.json({ message: "Sesión cerrada exitosamente" });
-    }
-
-    const sessionRecord = await findSessionByRefreshToken(tokenFromCookie);
-    if (sessionRecord) {
-      await sessionRecord.docRef.update({ revoke: true });
-    }
-
+  const clearAuthCookies = () => {
     const prod = process.env.NODE_ENV === "production";
     res.clearCookie("AccessToken", {
       httpOnly: true,
@@ -590,11 +562,38 @@ export const logout = async (req: Request, res: Response) => {
       sameSite: prod ? "none" : "lax",
       path: "/",
     });
+  };
 
+  try {
+    const tokenFromCookie =
+      req.cookies.RefreshToken ||
+      req.cookies.refreshToken ||
+      req.cookies.refresh ||
+      null;
+
+    if (tokenFromCookie) {
+      try {
+        const sessionRecord = await findSessionByRefreshToken(tokenFromCookie);
+        if (sessionRecord) {
+          await sessionRecord.docRef.update({ revoke: true });
+        }
+      } catch (sessionError: any) {
+        console.warn(
+          "[AUTH] logout: no se pudo revocar la sesión, continuando de todas formas:",
+          sessionError.message
+        );
+      }
+    }
+
+    clearAuthCookies();
     return res.json({ message: "Sesión cerrada exitosamente" });
   } catch (err: any) {
     console.error("Error en logout:", err);
-    return res.status(500).json({ error: "Error al cerrar sesión" });
+    clearAuthCookies();
+    return res.json({
+      message: "Sesión cerrada con advertencias",
+      warning: err.message,
+    });
   }
 };
 
