@@ -429,3 +429,69 @@ export const deleteRoom = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Error al eliminar sala" });
   }
 };
+
+/**
+ * Controller to end a room
+ * Sets endedAt timestamp and kicks all current participants
+ * Only creator or admins can end a room
+ * 
+ * @async
+ * @param {Request} req - Express request object (must contain id in params, userId in body)
+ * @param {Response} res - Express response object
+ * @returns {Promise<Response>} JSON response with success message or error
+ */
+export const endRoom = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+
+    console.log(`[END-ROOM] User ${userId} attempting to end room ${id}`);
+
+    // Get room data
+    const roomDoc = await ROOMS.doc(id).get();
+    if (!roomDoc.exists) {
+      return res.status(404).json({ error: "Sala no encontrada" });
+    }
+
+    const roomData = roomDoc.data();
+
+    // Check if already ended
+    if (roomData?.endedAt) {
+      return res.status(400).json({ error: "La reunión ya ha finalizado" });
+    }
+
+    // Check if deleted
+    if (roomData?.deletedAt) {
+      return res.status(404).json({ error: "Sala no encontrada" });
+    }
+
+    // Verify user is creator or admin
+    const creatorId = String(roomData?.creatorId);
+    const adminsId = roomData?.adminsId || [];
+    const userIdStr = String(userId);
+
+    const isCreator = creatorId === userIdStr;
+    const isAdmin = adminsId.includes(userIdStr);
+
+    if (!isCreator && !isAdmin) {
+      console.log(`[END-ROOM] User ${userId} is not authorized (creator: ${creatorId}, admins: ${adminsId})`);
+      return res.status(403).json({ 
+        error: "Solo el creador o un administrador puede finalizar la reunión" 
+      });
+    }
+
+    // Update room with endedAt timestamp
+    const endedAt = new Date().toISOString();
+    await ROOMS.doc(id).update({ endedAt });
+
+    console.log(`[END-ROOM] Room ${id} ended successfully by user ${userId}`);
+
+    res.json({ 
+      message: "Reunión finalizada correctamente",
+      endedAt 
+    });
+  } catch (error) {
+    console.error("[END-ROOM] Error ending room:", error);
+    res.status(500).json({ error: "Error al finalizar reunión" });
+  }
+};

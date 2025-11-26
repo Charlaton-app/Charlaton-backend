@@ -12,25 +12,67 @@ const ROOMS = db.collection("rooms");
 
 /**
  * Get all connections for a specific room
+ * Includes user information for each connection
  * 
  * @async
  * @param {Request} req - Express request object (roomId in params)
  * @param {Response} res - Express response object
- * @returns {Promise<Response>} JSON array of connections or error
+ * @returns {Promise<Response>} JSON array of connections with user info or error
  */
 export const getConnectionsByRoom = async (req: Request, res: Response) => {
   try {
     const { roomId } = req.params;
 
-    const snap = await ROOMS.doc(roomId).collection("connections").get();
+    // Only get ACTIVE connections (leftAt === null)
+    const snap = await ROOMS.doc(roomId)
+      .collection("connections")
+      .where("leftAt", "==", null)
+      .get();
 
-    const connections = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    // Get user information for each connection
+    const connections = await Promise.all(
+      snap.docs.map(async (d) => {
+        const connectionData: any = {
+          id: d.id,
+          ...d.data(),
+        };
+
+        // Get user information if userId exists
+        const userId = connectionData.userId;
+        if (userId !== null && userId !== undefined) {
+          try {
+            const userIdStr = String(userId);
+            const userDoc = await db.collection("users").doc(userIdStr).get();
+            
+            if (userDoc.exists) {
+              const userData = userDoc.data();
+              connectionData.user = {
+                id: userIdStr,
+                email: userData?.email || "",
+                nickname: userData?.nickname,
+                displayName: userData?.displayName,
+              };
+            }
+          } catch (userError) {
+            console.error(`[CONNECTION] Error fetching user ${userId}:`, userError);
+          }
+        }
+
+        // Ensure userId is string for consistency
+        if (connectionData.userId && typeof connectionData.userId === "number") {
+          connectionData.userId = String(connectionData.userId);
+        }
+
+        // Include roomId for reference
+        connectionData.roomId = roomId;
+
+        return connectionData;
+      })
+    );
 
     res.json(connections);
-  } catch {
+  } catch (error) {
+    console.error("[CONNECTION] Error in getConnectionsByRoom:", error);
     res.status(500).json({ error: "Error al obtener conexiones" });
   }
 };
@@ -47,18 +89,26 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
  */
 export const createConnectionAux = async (userId: any , roomId: any) => {
   try {
+    // Determine if userId should be stored as string or number
+    let userIdToStore: any = userId;
+    const userIdAsNumber = Number(userId);
+    
+    if (!isNaN(userIdAsNumber) && userIdAsNumber.toString() === userId.toString()) {
+      userIdToStore = userIdAsNumber;
+    } else {
+      userIdToStore = String(userId);
+    }
 
     // Search for previous active connection
     const snap = await ROOMS.doc(String(roomId))
       .collection("connections")
-      .where("userId", "==", Number(userId))
+      .where("userId", "==", userIdToStore)
       .where("leftAt", "==", null)
       .get();
 
     if (!snap.empty) {
       // Refresh existing connection
       const id = snap.docs[0].id;
-
       const updated = {
         joinedAt: new Date().toISOString(),
         leftAt: null,
@@ -74,9 +124,8 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
 
     // Create new connection
     const ref = ROOMS.doc(String(roomId)).collection("connections").doc();
-
     const newConn = {
-      userId: Number(userId),
+      userId: userIdToStore,
       joinedAt: new Date().toISOString(),
       leftAt: null,
     };
@@ -84,7 +133,8 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
     await ref.set(newConn);
 
     return {user: userId, success: true};
-  } catch {
+  } catch (error) {
+    console.error(`[CREATE-CONNECTION-AUX] Error:`, error);
     return {user: userId, success: false};
   }
 };
@@ -100,18 +150,28 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
  */
 export const leftConnectionAux = async (userId: any, roomId: any) => {
   try {
+    // Determine userId format (same logic as createConnectionAux)
+    let userIdToSearch: any = userId;
+    const userIdAsNumber = Number(userId);
+    
+    if (!isNaN(userIdAsNumber) && userIdAsNumber.toString() === userId.toString()) {
+      userIdToSearch = userIdAsNumber;
+    } else {
+      userIdToSearch = String(userId);
+    }
 
     const snap = await ROOMS.doc(String(roomId))
       .collection("connections")
-      .where("userId", "==", Number(userId))
+      .where("userId", "==", userIdToSearch)
       .where("leftAt", "==", null)
       .get();
 
-    if (snap.empty)
+    if (snap.empty) {
+      console.warn(`[LEFT-CONNECTION-AUX] No active connection found for user ${userId} in room ${roomId}`);
       return {user: userId, success: false};
+    }
 
     const docId = snap.docs[0].id;
-
     const updated = {
       leftAt: new Date().toISOString(),
     };
@@ -122,8 +182,9 @@ export const leftConnectionAux = async (userId: any, roomId: any) => {
       .update(updated);
 
     return {user: userId, success: true};
-  } catch {
-    return {user: userId, success: true};
+  } catch (error) {
+    console.error(`[LEFT-CONNECTION-AUX] Error:`, error);
+    return {user: userId, success: false};
   }
 };
 

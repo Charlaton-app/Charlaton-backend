@@ -35,11 +35,55 @@ export const getAllMessagesByRoom = async (req: Request, res: Response) => {
 
     const snap = await query.get();
 
-    const messages = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    const messages = await Promise.all(
+      snap.docs.map(async (d) => {
+        const messageData: any = {
+          id: d.id,
+          ...d.data(),
+        };
 
+        // Get user information for the message sender
+        if (messageData.senderId || messageData.userId) {
+          const userId = messageData.senderId || messageData.userId;
+          try {
+            const userDoc = await db.collection("users").doc(userId).get();
+            if (userDoc.exists) {
+              const userData = userDoc.data();
+              messageData.user = {
+                id: userId,
+                email: userData?.email || "",
+                nickname: userData?.nickname,
+                displayName: userData?.displayName,
+              };
+            }
+          } catch (userError) {
+            console.error(`Error fetching user ${userId}:`, userError);
+          }
+        }
+
+        // Normalize field names
+        if (messageData.senderId && !messageData.userId) {
+          messageData.userId = messageData.senderId;
+        }
+        if (messageData.text && !messageData.content) {
+          messageData.content = messageData.text;
+        }
+        if (messageData.createAt && !messageData.createdAt) {
+          // Convert Firestore timestamp to ISO string if needed
+          if (messageData.createAt._seconds) {
+            messageData.createdAt = new Date(messageData.createAt._seconds * 1000).toISOString();
+          } else if (typeof messageData.createAt === 'number') {
+            messageData.createdAt = new Date(messageData.createAt).toISOString();
+          } else {
+            messageData.createdAt = messageData.createAt;
+          }
+        }
+
+        return messageData;
+      })
+    );
+
+    console.log(`[MESSAGE-CONTROLLER] Fetched ${messages.length} messages with user info for room ${roomId}`);
     res.json(messages);
   } catch (error) {
     console.error("Error al obtener mensajes:", error);

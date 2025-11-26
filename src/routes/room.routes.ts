@@ -7,8 +7,11 @@ import {
   deleteRoom,
   changePassword,
   addAdmin,
-  removeAdmin
+  removeAdmin,
+  endRoom
 } from "../controllers/room.controller";
+import { getUserRooms } from "../controllers/userRooms.controller";
+import { getUserStats } from "../controllers/userStats.controller";
 import verifyToken from "../middlewares/authentication";
 
 const router = Router();
@@ -23,6 +26,32 @@ const router = Router();
  * @returns {object} 500 - Server error
  */
 router.get("/", verifyToken, getAllRooms);
+
+/**
+ * @route GET /rooms/user/:userId/stats
+ * @desc Gets user statistics (meetings, duration, contacts)
+ * @access Protected
+ * @middleware verifyToken - Verifies user is authenticated
+ * @param {string} userId - User ID to get stats for
+ * @returns {object} 200 - User statistics
+ * @returns {object} 401 - Not authenticated
+ * @returns {object} 500 - Server error
+ */
+router.get("/user/:userId/stats", verifyToken, getUserStats);
+
+/**
+ * @route GET /rooms/user/:userId
+ * @desc Gets all rooms where user is creator or has participated (paginated)
+ * @access Protected
+ * @middleware verifyToken - Verifies user is authenticated
+ * @param {string} userId - User ID to get rooms for
+ * @query {number} [page=1] - Page number
+ * @query {number} [limit=3] - Items per page
+ * @returns {object} 200 - Paginated list of user's rooms
+ * @returns {object} 401 - Not authenticated
+ * @returns {object} 500 - Server error
+ */
+router.get("/user/:userId", verifyToken, getUserRooms);
 
 /**
  * @route GET /rooms/:id
@@ -84,6 +113,19 @@ router.put("/password/:id", verifyToken, changePassword);
  * @returns {object} 500 - Server error
  */
 router.put("/:id", verifyToken, updateRoom);
+
+/**
+ * @route POST /rooms/:id/end
+ * @desc Ends a room (sets endedAt timestamp, prevents new joins)
+ * @access Protected
+ * @middleware verifyToken - Verifies user is authenticated
+ * @param {string} id - ID of room to end
+ * @returns {object} 200 - Room ended successfully
+ * @returns {object} 401 - Not authenticated
+ * @returns {object} 403 - Not authorized (only creator/admin can end)
+ * @returns {object} 500 - Server error
+ */
+router.post("/:id/end", verifyToken, endRoom);
 
 /**
  * @route DELETE /rooms/:id
