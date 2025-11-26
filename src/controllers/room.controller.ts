@@ -183,6 +183,17 @@ const generateSimpleRoomId = async (): Promise<string> => {
   return `${getRandomLetters(3)}-${getRandomLetters(3)}-${Date.now().toString(36).slice(-3)}`;
 };
 
+/**
+ * Create a new meeting room.
+ *
+ * The room ID is generated using a short, human‑friendly scheme and the
+ * creator is always added to the admins list. Optional fields such as
+ * password, parent room and schedule time are supported.
+ *
+ * @param req - Express request containing room creation data in `body`.
+ * @param res - Express response.
+ * @returns JSON with the created room ID and persisted data.
+ */
 export const createRoom = async (req: Request, res: Response) => {
   try {
     const {

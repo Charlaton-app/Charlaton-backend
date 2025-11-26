@@ -177,13 +177,15 @@ export const changePassword = async (req: Request, res: Response) => {
 };
 
 /**
- * Controlador para actualizar información de un usuario.
- * Permite actualizar email y nickname. Otros campos se ignoran.
+ * Update basic user information.
  *
- * @async
- * @param {Request} req - Objeto de solicitud de Express (debe contener id en params, email y/o nickname en body)
- * @param {Response} res - Objeto de respuesta de Express
- * @returns {Promise<Response|void>} Respuesta JSON con los datos actualizados del usuario
+ * Allows changing email, nickname and age (`edad`). Other fields are ignored.
+ * The controller re‑loads the user after the update and returns a sanitized
+ * payload without the password.
+ *
+ * @param req - Express request (must contain `id` in params and optional `email`, `nickname`, `edad` in body).
+ * @param res - Express response.
+ * @returns JSON with the updated user document or an error status.
  */
 export const updateUser = async (req: Request, res: Response) => {
   try {
@@ -217,12 +219,17 @@ export const updateUser = async (req: Request, res: Response) => {
 };
 
 /**
- * Controlador para eliminar un usuario de la base de datos.
+ * Delete a user from Firestore and (optionally) from Firebase Auth.
  *
- * @async
- * @param {Request} req - Objeto de solicitud de Express (debe contener id en params)
- * @param {Response} res - Objeto de respuesta de Express
- * @returns {Promise<Response>} Respuesta JSON con mensaje de éxito o error
+ * The controller:
+ * 1. Loads the user document by `id`.
+ * 2. Deletes the Firestore document.
+ * 3. Attempts to delete the corresponding Firebase Auth user, using any
+ *    known UID fields (`uid`, `firebaseUid`, etc.).
+ *
+ * @param req - Express request (must contain `id` in params).
+ * @param res - Express response.
+ * @returns JSON with a success message or an error status code.
  */
 export const deleteUser = async (req: Request, res: Response) => {
   try {

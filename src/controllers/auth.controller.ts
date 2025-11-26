@@ -14,14 +14,19 @@ import {
 const SALT_ROUNDS = 10;
 
 /**
- * Opciones de configuración para las cookies de autenticación.
- * Define las propiedades de seguridad según el entorno (producción o desarrollo).
+ * Authentication cookie configuration helpers.
+ *
+ * These functions centralize the options used when setting HTTP‑only cookies
+ * for access tokens, refresh tokens and device identifiers. The options are
+ * adjusted depending on whether the API is running in production or not.
  */
 const COOKIE_OPTIONS = {
   /**
-   * Opciones para la cookie de access token
-   * @param {boolean} prod - Indica si está en entorno de producción
-   * @returns {object} Configuración de la cookie con httpOnly, secure, sameSite y maxAge (24 horas)
+   * Build cookie options for the short‑lived access token.
+   *
+   * @param prod - Whether the API is running in production.
+   * @returns Express cookie options with `httpOnly`, `secure`, `sameSite`
+   *          and a 24‑hour `maxAge`.
    */
   access: (prod = false) => ({
     httpOnly: true,
@@ -30,9 +35,11 @@ const COOKIE_OPTIONS = {
     maxAge: 24 * 60 * 60 * 1000,
   }),
   /**
-   * Opciones para la cookie de refresh token
-   * @param {boolean} prod - Indica si está en entorno de producción
-   * @returns {object} Configuración de la cookie con httpOnly, secure, sameSite y maxAge (7 días)
+   * Build cookie options for the long‑lived refresh token.
+   *
+   * @param prod - Whether the API is running in production.
+   * @returns Express cookie options with `httpOnly`, `secure`, `sameSite`
+   *          and a 7‑day `maxAge`.
    */
   refresh: (prod = false) => ({
     httpOnly: true,
@@ -41,9 +48,11 @@ const COOKIE_OPTIONS = {
     maxAge: 7 * 24 * 60 * 60 * 1000,
   }),
   /**
-   * Opciones para la cookie de device ID
-   * @param {boolean} prod - Indica si está en entorno de producción
-   * @returns {object} Configuración de la cookie con httpOnly, secure, sameSite y maxAge (365 días)
+   * Build cookie options for the persistent device identifier.
+   *
+   * @param prod - Whether the API is running in production.
+   * @returns Express cookie options with `httpOnly`, `secure`, `sameSite`
+   *          and a 365‑day `maxAge`.
    */
   device: (prod = false) => ({
     httpOnly: true,
@@ -57,12 +66,13 @@ const COOKIE_OPTIONS = {
 // Utility: excludePassword
 // ---------------------------
 /**
- * Excluye la contraseña del objeto de usuario y obtiene información del rol.
- * Consulta la colección de roles para obtener el tipo de rol asociado al usuario.
+ * Build a safe user payload without the password field and with role metadata.
  *
- * @async
- * @param {any} userDoc - Documento del usuario con campos id, email, nickname, rolId, etc.
- * @returns {Promise<object|null>} Objeto con datos del usuario sin contraseña y con tipo de rol, o null si no existe el usuario
+ * The function also looks up the role document (if any) and attaches its
+ * `type` property as a high‑level `role` string.
+ *
+ * @param userDoc - Firestore user document data (must include at least `id` and `email`).
+ * @returns A sanitized user object ready to send to the client, or `null` if input is falsy.
  */
 export const excludePassword = async (userDoc: any) => {
   if (!userDoc) return null;
@@ -99,12 +109,14 @@ export const excludePassword = async (userDoc: any) => {
 // Returns: { docRef, data, userId }
 // ---------------------------
 /**
- * Busca una sesión por refresh token utilizando collectionGroup.
- * Recorre todas las subcolecciones 'sessions' en la base de datos.
+ * Find a user session document by its refresh token.
  *
- * @async
- * @param {string} refreshToken - Token de actualización a buscar
- * @returns {Promise<object|null>} Objeto con docRef (referencia del documento), data (datos de la sesión) y userId, o null si no se encuentra
+ * This uses a Firestore `collectionGroup` query over all `sessions`
+ * sub‑collections and returns the first match, if any.
+ *
+ * @param refreshToken - Refresh token value stored in the session document.
+ * @returns An object containing the document reference, raw data and `userId`,
+ *          or `null` when no session is found.
  */
 const findSessionByRefreshToken = async (refreshToken: string) => {
   const snap = await db

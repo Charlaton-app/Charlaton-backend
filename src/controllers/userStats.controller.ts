@@ -5,10 +5,21 @@ const ROOMS = db.collection("rooms");
 const USERS = db.collection("users");
 
 /**
- * Get user statistics
- * - Total meetings this month
- * - Total time in meetings
- * - Active contacts (unique users interacted with)
+ * Compute high‑level statistics for a given user.
+ *
+ * Metrics:
+ * - `meetingsThisMonth`: number of distinct rooms the user has joined
+ *   since the first day of the current month.
+ * - `totalDuration`: formatted total time spent in meetings.
+ * - `activeContacts`: count of unique other users they have shared
+ *   a room with.
+ *
+ * The current implementation scans all non‑deleted rooms and their
+ * `connections` sub‑collections. It is optimized for correctness and
+ * simplicity rather than raw performance.
+ *
+ * @param req - Express request (expects `userId` in params).
+ * @param res - Express response.
  */
 export const getUserStats = async (req: Request, res: Response) => {
   try {
