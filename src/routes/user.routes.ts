@@ -25,15 +25,13 @@ router.get("/", getAllUsers);
 /**
  * @route GET /users/:id
  * @desc Gets a specific user by ID
- * @access Protected
- * @middleware verifyToken - Verifies user is authenticated
+ * @access Public (for participant enrichment)
  * @param {string} id - ID of user to retrieve
  * @returns {object} 200 - User data
- * @returns {object} 401 - Not authenticated
  * @returns {object} 404 - User not found
  * @returns {object} 500 - Server error
  */
-router.get("/:id", verifyToken, getUserById);
+router.get("/:id", getUserById);
 
 /**
  * @route POST /users
