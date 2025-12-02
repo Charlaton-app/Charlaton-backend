@@ -3,6 +3,7 @@ import { db } from "../config/db";
 import bcrypt from "bcryptjs";
 import admin from "firebase-admin";
 import { excludePassword } from "./auth.controller";
+import { cache, CacheKeys } from "../utils/cache";
 
 const SALT_ROUNDS = 10;
 
@@ -65,7 +66,14 @@ export const getAllUsers = async (req: Request, res: Response) => {
 };
 
 /**
- * Controlador para obtener un usuario por su ID.
+ * 🎯 OPTIMIZED: Controlador para obtener un usuario por su ID.
+ * 
+ * OPTIMIZATIONS APPLIED:
+ * 1. ✅ Aggressive caching (5 min TTL) - user data rarely changes
+ * 2. ✅ Cache invalidation on user updates
+ * 
+ * BEFORE: Every request reads from Firestore
+ * AFTER: Cached for 5 minutes = dramatically fewer reads
  *
  * @async
  * @param {Request} req - Objeto de solicitud de Express (debe contener id en params)
@@ -75,16 +83,34 @@ export const getAllUsers = async (req: Request, res: Response) => {
 export const getUserById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const doc = await db.collection("users").doc(id).get();
 
-    if (!doc.exists)
-      return res.status(404).json({ error: "Usuario no encontrado" });
-
-    const userData = { id: doc.id, ...doc.data() };
-    const userResponse = await excludePassword(userData);
+    // 🎯 OPTIMIZATION: Cache user data with 5-minute TTL
+    const cacheKey = CacheKeys.user(id);
     
-    res.json(userResponse);
-  } catch (error) {
+    const userData = await cache.getOrFetch(
+      cacheKey,
+      async () => {
+        console.log(`[USER] 👤 Fetching user ${id} from Firestore`);
+        const doc = await db.collection("users").doc(id).get();
+
+        if (!doc.exists) {
+          throw new Error("USER_NOT_FOUND");
+        }
+
+        const data = { id: doc.id, ...doc.data() };
+        const userResponse = await excludePassword(data);
+        
+        return userResponse;
+      },
+      300 // 5-minute cache TTL
+    );
+    
+    res.json(userData);
+  } catch (error: any) {
+    if (error.message === "USER_NOT_FOUND") {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+    console.error("[USER] Error fetching user:", error);
     res.status(500).json({ error: "Error al obtener usuario" });
   }
 };
@@ -177,11 +203,15 @@ export const changePassword = async (req: Request, res: Response) => {
 };
 
 /**
- * Update basic user information.
+ * 🎯 OPTIMIZED: Update basic user information with cache invalidation.
  *
  * Allows changing email, nickname and age (`edad`). Other fields are ignored.
  * The controller re‑loads the user after the update and returns a sanitized
  * payload without the password.
+ * 
+ * OPTIMIZATIONS APPLIED:
+ * 1. ✅ Invalidate user cache on update
+ * 2. ✅ Invalidate related caches (stats, rooms)
  *
  * @param req - Express request (must contain `id` in params and optional `email`, `nickname`, `edad` in body).
  * @param res - Express response.
@@ -206,6 +236,11 @@ export const updateUser = async (req: Request, res: Response) => {
     updateData.updatedAt = admin.firestore.Timestamp.fromDate(new Date());
 
     await db.collection("users").doc(id).update(updateData);
+
+    // 🎯 OPTIMIZATION: Invalidate all user-related caches
+    cache.invalidate(CacheKeys.user(id));
+    cache.invalidatePattern(new RegExp(`^user:(stats|rooms):${id}`));
+    console.log(`[USER] ♻️ Cache invalidated for user ${id}`);
 
     const updated = await db.collection("users").doc(id).get();
     const userData = { id: updated.id, ...updated.data() };
