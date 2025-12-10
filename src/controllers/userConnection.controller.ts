@@ -241,13 +241,15 @@ export const leftConnectionAux = async (userId: any, roomId: any) => {
  */
 export const createConnection = async (req: Request, res: Response) => {
   try {
-    const { userId, roomId } = req.body;
+    const { userId, roomId, firebaseUid } = req.body;
 
     if (!userId || !roomId) {
       return res.status(400).json({ error: "userId and roomId are required" });
     }
 
-    const result = await createConnectionAux(userId, roomId);
+    console.log(`[CREATE-CONNECTION] Creating connection for userId: ${userId}, roomId: ${roomId}, firebaseUid: ${firebaseUid || 'not provided'}`);
+
+    const result = await createConnectionAux(userId, roomId, firebaseUid);
 
     if (!result.success) {
       return res.status(500).json({ error: "Error al crear conexión" });
