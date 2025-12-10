@@ -37,6 +37,9 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
           ...d.data(),
         };
 
+        // Preserve firebaseUid from connection document
+        const firebaseUid = connectionData.firebaseUid;
+
         // Get user information if userId exists
         const userId = connectionData.userId;
         if (userId !== null && userId !== undefined) {
@@ -63,6 +66,11 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
           connectionData.userId = String(connectionData.userId);
         }
 
+        // Ensure firebaseUid is included in response
+        if (firebaseUid) {
+          connectionData.firebaseUid = firebaseUid;
+        }
+
         // Include roomId for reference
         connectionData.roomId = roomId;
 
@@ -78,6 +86,7 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
 };
 
 /**
+/**
  * Create or refresh user connection to a room (auxiliary function)
  * If an active connection exists, updates joinedAt timestamp
  * Otherwise, creates a new connection
@@ -85,9 +94,10 @@ export const getConnectionsByRoom = async (req: Request, res: Response) => {
  * @async
  * @param {any} userId - User ID joining the room
  * @param {any} roomId - Room ID being joined
+ * @param {string} [firebaseUid] - Firebase UID for WebRTC mapping
  * @returns {Promise<object>} Object with user and success status
  */
-export const createConnectionAux = async (userId: any , roomId: any) => {
+export const createConnectionAux = async (userId: any, roomId: any, firebaseUid?: string) => {
   try {
     // Determine if userId should be stored as string or number
     let userIdToStore: any = userId;
@@ -97,6 +107,25 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
       userIdToStore = userIdAsNumber;
     } else {
       userIdToStore = String(userId);
+    }
+
+    // If firebaseUid not provided, try to get it from user document
+    let resolvedFirebaseUid = firebaseUid;
+    if (!resolvedFirebaseUid) {
+      try {
+        const userDoc = await db.collection("users").doc(String(userId)).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          resolvedFirebaseUid = userData?.uid || userData?.firebaseUid;
+          if (!resolvedFirebaseUid) {
+            console.warn(`[CREATE-CONNECTION-AUX] ⚠️ User doc exists but no firebaseUid field for userId: ${userId}`);
+          }
+        } else {
+          console.warn(`[CREATE-CONNECTION-AUX] ⚠️ User document not found for userId: ${userId}`);
+        }
+      } catch (err) {
+        console.error(`[CREATE-CONNECTION-AUX] ❌ Could not fetch user doc for userId: ${userId}`, err);
+      }
     }
 
     // Search for previous active connection
@@ -109,10 +138,17 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
     if (!snap.empty) {
       // Refresh existing connection
       const id = snap.docs[0].id;
-      const updated = {
+      const updated: any = {
         joinedAt: new Date().toISOString(),
         leftAt: null,
       };
+
+      // Include firebaseUid if available
+      if (resolvedFirebaseUid) {
+        updated.firebaseUid = resolvedFirebaseUid;
+      } else {
+        console.warn(`[CREATE-CONNECTION-AUX] ⚠️ No firebaseUid available for userId: ${userId}`);
+      }
 
       await ROOMS.doc(String(roomId))
         .collection("connections")
@@ -124,11 +160,18 @@ export const createConnectionAux = async (userId: any , roomId: any) => {
 
     // Create new connection
     const ref = ROOMS.doc(String(roomId)).collection("connections").doc();
-    const newConn = {
+    const newConn: any = {
       userId: userIdToStore,
       joinedAt: new Date().toISOString(),
       leftAt: null,
     };
+
+    // Include firebaseUid if available
+    if (resolvedFirebaseUid) {
+      newConn.firebaseUid = resolvedFirebaseUid;
+    } else {
+      console.warn(`[CREATE-CONNECTION-AUX] ⚠️ No firebaseUid available for userId: ${userId}`);
+    }
 
     await ref.set(newConn);
 

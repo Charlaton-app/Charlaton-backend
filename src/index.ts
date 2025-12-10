@@ -238,6 +238,8 @@ const getAllowedOrigins = (): string[] => {
   // Add localhost for development
   if (process.env.NODE_ENV !== "production") {
     origins.push("http://localhost:5173");
+    // Allow local network access
+    origins.push("http://192.168.20.123:5173");
   }
   
   return origins;
@@ -298,8 +300,9 @@ app.use((req,res) => {
     res.status(404).json({error: "Route not found"});
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`📱 Accessible on local network at http://192.168.20.123:${PORT}`);
 });
 
 
